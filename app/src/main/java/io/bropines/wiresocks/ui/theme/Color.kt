@@ -1,4 +1,4 @@
-package com.example.awgproxy.ui.theme
+package io.bropines.wiresocks.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

@@ -1,4 +1,4 @@
-package com.example.awgproxy.viewmodel
+package io.bropines.wiresocks.viewmodel
 
 import android.app.Application
 import android.content.Context
@@ -7,7 +7,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import appctr.Appctr
-import com.example.awgproxy.AwgService
+import io.bropines.wiresocks.AwgService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow

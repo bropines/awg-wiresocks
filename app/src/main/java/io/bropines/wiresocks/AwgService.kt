@@ -1,4 +1,4 @@
-package com.example.awgproxy
+package io.bropines.wiresocks
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

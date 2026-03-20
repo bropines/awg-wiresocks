@@ -1,4 +1,4 @@
-package com.example.awgproxy.ui.screens
+package io.bropines.wiresocks.ui.screens
 
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -26,7 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import appctr.Appctr
-import com.example.awgproxy.viewmodel.ProxyViewModel
+import io.bropines.wiresocks.viewmodel.ProxyViewModel
 import kotlinx.coroutines.delay
 import java.io.OutputStreamWriter
 import java.text.SimpleDateFormat
