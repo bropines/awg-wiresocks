@@ -3,8 +3,6 @@ package appctr
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,8 +11,8 @@ import (
 	"time"
 
 	"github.com/amnezia-vpn/amneziawg-go/device"
-	wireproxy "github.com/artem-russkikh/wireproxy-awg".
-		_ "golang.org/x/mobile/bind"
+	wireproxy "github.com/artem-russkikh/wireproxy-awg"
+	_ "golang.org/x/mobile/bind"
 )
 
 // --- СИСТЕМА ЛОГОВ (НЕБЛОКИРУЮЩАЯ) ---
@@ -76,37 +74,6 @@ func redirectGlobalLogs() {
 	}()
 }
 
-// --- ПРЕПРОЦЕССОР КОНФИГА (ФИКС ДЛЯ I1-I5) ---
-// Ядро AWG требует Base64, а в конфигах лежит HEX. Фиксим на лету.
-func preProcessConfig(configStr string) string {
-	lines := strings.Split(configStr, "\n")
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		upper := strings.ToUpper(trimmed)
-		if strings.HasPrefix(upper, "I1") || strings.HasPrefix(upper, "I2") ||
-			strings.HasPrefix(upper, "I3") || strings.HasPrefix(upper, "I4") ||
-			strings.HasPrefix(upper, "I5") {
-
-			parts := strings.SplitN(trimmed, "=", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				val := strings.TrimSpace(parts[1])
-				// Ищем паттерн <b 0x...>
-				if strings.HasPrefix(val, "<b 0x") && strings.HasSuffix(val, ">") {
-					hexStr := val[5 : len(val)-1]
-					b, err := hex.DecodeString(hexStr)
-					if err == nil {
-						b64Str := base64.StdEncoding.EncodeToString(b)
-						lines[i] = fmt.Sprintf("%s = %s", key, b64Str)
-						AddLog("CORE", fmt.Sprintf("Auto-fixed %s: converted HEX to Base64", key))
-					}
-				}
-			}
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
 // --- УПРАВЛЕНИЕ ЯДРОМ ---
 var (
 	stateMu    sync.Mutex
@@ -122,6 +89,7 @@ func IsRunning() bool {
 
 func Start(configStr string, cacheDir string) error {
 	stateMu.Lock()
+	// Механизм самовосстановления: жестоко убиваем зомби-процессы, если они зависли
 	if activeTun != nil {
 		if cancelFunc != nil {
 			cancelFunc()
@@ -135,21 +103,21 @@ func Start(configStr string, cacheDir string) error {
 
 	redirectGlobalLogs()
 
-	// Применяем нашу магию к конфигу перед стартом
-	fixedConfig := preProcessConfig(configStr)
-
+	// Сохраняем конфиг во временный файл, т.к. wireproxy работает с путями
 	tmpConf := filepath.Join(cacheDir, "current.conf")
-	err := os.WriteFile(tmpConf, []byte(fixedConfig), 0600)
+	err := os.WriteFile(tmpConf, []byte(configStr), 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write config: %v", err)
 	}
 	defer os.Remove(tmpConf)
 
+	// Новый парсер: сам читает Interface, Peer, Socks5, http и параметры AWG
 	conf, err := wireproxy.ParseConfig(tmpConf)
 	if err != nil {
 		return fmt.Errorf("config parse error: %v", err)
 	}
 
+	// Запускаем сам туннель (включая UDP роутинг)
 	tun, err := wireproxy.StartWireguard(conf.Device, device.LogLevelVerbose)
 	if err != nil {
 		return fmt.Errorf("wireguard start error: %v", err)
@@ -161,6 +129,7 @@ func Start(configStr string, cacheDir string) error {
 	cancelFunc = cancel
 	stateMu.Unlock()
 
+	// Поднимаем все прокси, которые мы динамически допишем в конфиг из Kotlin
 	for _, spawner := range conf.Routines {
 		go spawner.SpawnRoutine(tun)
 	}
