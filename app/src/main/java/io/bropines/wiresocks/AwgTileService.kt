@@ -1,4 +1,4 @@
-package com.example.awgproxy
+package io.bropines.wiresocks
 
 import android.content.Context
 import android.content.Intent

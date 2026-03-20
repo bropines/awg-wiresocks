@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.example.awgproxy"
+    namespace = "io.bropines.wiresocks"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.awgproxy"
+        applicationId = "io.bropines.wiresocks"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {

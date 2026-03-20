@@ -1,4 +1,4 @@
-package com.example.awgproxy.ui.theme
+package io.bropines.wiresocks.ui.theme
 
 import android.app.Activity
 import android.os.Build
@@ -53,6 +53,7 @@ fun AwgProxyTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
+            window.navigationBarColor = colorScheme.background.toArgb() 
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }

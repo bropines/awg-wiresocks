@@ -1,4 +1,4 @@
-package com.example.awgproxy.ui.screens
+package io.bropines.wiresocks.ui.screens
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -12,7 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.awgproxy.viewmodel.ProxyViewModel
+import io.bropines.wiresocks.viewmodel.ProxyViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -1,4 +1,4 @@
-package com.example.awgproxy.ui.screens
+package io.bropines.wiresocks.ui.screens
 
 import android.content.ClipboardManager
 import android.content.Context
@@ -21,7 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.awgproxy.viewmodel.ProxyViewModel
+import io.bropines.wiresocks.viewmodel.ProxyViewModel
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -58,6 +58,10 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
     var h3 by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "H3")) }
     var h4 by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "H4")) }
     var i1 by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "I1")) }
+    var i2 by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "I2")) }
+    var i3 by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "I3")) }
+    var i4 by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "I4")) }
+    var i5 by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "I5")) }
 
     var showAdvanced by remember { mutableStateOf(false) }
 
@@ -92,6 +96,10 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
             ${if (h3.isNotBlank()) "H3 = $h3" else ""}
             ${if (h4.isNotBlank()) "H4 = $h4" else ""}
             ${if (i1.isNotBlank()) "I1 = $i1" else ""}
+            ${if (i2.isNotBlank()) "I2 = $i2" else ""}
+            ${if (i3.isNotBlank()) "I3 = $i3" else ""}
+            ${if (i4.isNotBlank()) "I4 = $i4" else ""}
+            ${if (i5.isNotBlank()) "I5 = $i5" else ""}
 
             [Peer]
             PublicKey = $publicKey
@@ -180,7 +188,15 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
                                 OutlinedTextField(value = h4, onValueChange = { h4 = it }, label = { Text("H4") }, modifier = Modifier.weight(1f))
                             }
                             Spacer(modifier = Modifier.height(8.dp))
-                            OutlinedTextField(value = i1, onValueChange = { i1 = it }, label = { Text("I1 (Payload)") }, modifier = Modifier.fillMaxWidth())
+                            OutlinedTextField(value = i1, onValueChange = { i1 = it }, label = { Text("I1") }, modifier = Modifier.fillMaxWidth())
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(value = i2, onValueChange = { i2 = it }, label = { Text("I2") }, modifier = Modifier.fillMaxWidth())
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(value = i3, onValueChange = { i3 = it }, label = { Text("I3") }, modifier = Modifier.fillMaxWidth())
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(value = i4, onValueChange = { i4 = it }, label = { Text("I4") }, modifier = Modifier.fillMaxWidth())
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(value = i5, onValueChange = { i5 = it }, label = { Text("I5") }, modifier = Modifier.fillMaxWidth())
                         }
                     }
                 }
