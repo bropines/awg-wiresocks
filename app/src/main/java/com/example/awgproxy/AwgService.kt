@@ -5,12 +5,17 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import appctr.Appctr
 
 class AwgService : Service() {
+
+    private var wakeLock: PowerManager.WakeLock? = null
 
     companion object {
         const val ACTION_START = "ACTION_START"
@@ -37,13 +42,22 @@ class AwgService : Service() {
     }
 
     private fun startProxy(configStr: String) {
-        // Показываем уведомление (обязательно для Foreground Service)
-        startForeground(NOTIFICATION_ID, buildNotification("AWG Proxy is running"))
+        // 1. Берем WakeLock, чтобы процессор не уснул при свернутом приложении
+        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AwgProxy::EngineWakeLock")
+        wakeLock?.acquire()
+
+        // 2. Запускаем бронированный Foreground Service (Android 14 требует указания типа прямо тут)
+        val notification = buildNotification("AWG Proxy is running")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         Thread {
             try {
                 if (!Appctr.isRunning()) {
-                    // Передаем конфиг и кэш-директорию в наш Go-код
                     Appctr.start(configStr, cacheDir.absolutePath)
                 }
             } catch (e: Exception) {
@@ -55,7 +69,10 @@ class AwgService : Service() {
 
     private fun stopProxy() {
         Appctr.stop()
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        wakeLock?.let {
+            if (it.isHeld) it.release()
+        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
@@ -73,7 +90,7 @@ class AwgService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("AWG Proxy")
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_secure) // Встроенная иконка замочка
+            .setSmallIcon(android.R.drawable.ic_secure)
             .setContentIntent(pendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent)
             .setOngoing(true)
