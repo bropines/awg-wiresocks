@@ -1,0 +1,57 @@
+# --- Android / IntelliJ ---
+.gradle/
+build/
+*.iml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/caches
+.idea/navEditor.xml
+captures/
+.externalNativeBuild
+.cxx/
+local.properties
+
+# --- Kotlin ---
+.kotlin/
+kotlin-daemon-embeddable-*.jar
+
+# --- Gradle ---
+.gradle-tree/
+gradle-app.setting
+!gradle-wrapper.jar
+.gradle-wrapper.jar
+gradlew
+gradlew.bat
+
+# --- Android Studio / Build Artifacts ---
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+
+# --- Bundle Tool / Keystores ---
+# Никогда не пушь ключи в репозиторий!
+*.jks
+*.keystore
+*.p12
+*.key
+google-services.json
+
+# --- Log files ---
+*.log
+
+# --- OS specific ---
+.DS_Store
+Thumbs.db
+
+# --- Backup and Temp ---
+*.bak
+*.swp
+*~
