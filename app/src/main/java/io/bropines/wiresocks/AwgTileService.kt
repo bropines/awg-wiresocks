@@ -35,18 +35,25 @@ class AwgTileService : TileService() {
     override fun onClick() {
         super.onClick()
         val isRunning = Appctr.isRunning()
-        val wgConfFile = File(filesDir, "awg.conf")
 
         if (isRunning) {
             startService(Intent(this, AwgService::class.java).apply { action = AwgService.ACTION_STOP })
         } else {
+            val prefs = getSharedPreferences("awg_prefs", Context.MODE_PRIVATE)
+            val selectedConfName = prefs.getString("selectedConfig", null)
+            
             // Если конфига нет, просто игнорим нажатие
+            if (selectedConfName == null) {
+                updateTileState()
+                return
+            }
+            
+            val wgConfFile = File(File(filesDir, "configs"), selectedConfName)
             if (!wgConfFile.exists()) {
                 updateTileState()
                 return
             }
 
-            val prefs = getSharedPreferences("awg_prefs", Context.MODE_PRIVATE)
             val socksPort = prefs.getString("socksPort", "1080") ?: "1080"
             val httpPort = prefs.getString("httpPort", "8080") ?: "8080"
 

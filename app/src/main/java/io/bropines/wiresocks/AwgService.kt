@@ -1,11 +1,15 @@
 package io.bropines.wiresocks
+import io.bropines.wiresocks.R
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
@@ -16,25 +20,30 @@ import appctr.Appctr
 class AwgService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var lastConfigStr: String? = null
+    
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     companion object {
         const val ACTION_START = "ACTION_START"
         const val ACTION_STOP = "ACTION_STOP"
         const val EXTRA_CONFIG = "EXTRA_CONFIG"
         private const val NOTIFICATION_ID = 1
-        private const val CHANNEL_ID = "awg_proxy_channel"
+        private const val CHANNEL_ID = "wiresocks_proxy_channel"
     }
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        setupNetworkMonitor()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
-                val configStr = intent.getStringExtra(EXTRA_CONFIG) ?: ""
-                startProxy(configStr)
+                lastConfigStr = intent.getStringExtra(EXTRA_CONFIG) ?: ""
+                startProxy(lastConfigStr!!)
             }
             ACTION_STOP -> stopProxy()
         }
@@ -42,13 +51,12 @@ class AwgService : Service() {
     }
 
     private fun startProxy(configStr: String) {
-        // 1. Берем WakeLock, чтобы процессор не уснул при свернутом приложении
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AwgProxy::EngineWakeLock")
-        wakeLock?.acquire()
+        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Wiresocks::EngineWakeLock")
+        wakeLock?.acquire(10*60*1000L /*10 minutes max just in case*/)
 
-        // 2. Запускаем бронированный Foreground Service (Android 14 требует указания типа прямо тут)
-        val notification = buildNotification("AWG Proxy is running")
+        val notification = buildNotification("Wiresocks is active")
+        
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
@@ -57,11 +65,9 @@ class AwgService : Service() {
 
         Thread {
             try {
-                if (!Appctr.isRunning()) {
-                    Appctr.start(configStr, cacheDir.absolutePath)
-                }
+                Appctr.start(configStr, cacheDir.absolutePath)
             } catch (e: Exception) {
-                Appctr.addLog("ERROR", "Service crash: ${e.message}")
+                Appctr.addLog("ERROR", "Core start failed: ${e.message}")
                 stopProxy()
             }
         }.start()
@@ -69,39 +75,53 @@ class AwgService : Service() {
 
     private fun stopProxy() {
         Appctr.stop()
-        wakeLock?.let {
-            if (it.isHeld) it.release()
-        }
+        wakeLock?.let { if (it.isHeld) it.release() }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
-    private fun buildNotification(text: String): android.app.Notification {
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+    private fun setupNetworkMonitor() {
+        connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                // Если сменилась сеть и прокси работал - рестартуем ядро
+                if (Appctr.isRunning() && lastConfigStr != null) {
+                    Appctr.addLog("CORE", "Network changed. Reconnecting tunnel...")
+                    Thread {
+                        Appctr.stop()
+                        Thread.sleep(1000) // Даем время закрыть сокеты
+                        Appctr.start(lastConfigStr!!, cacheDir.absolutePath)
+                    }.start()
+                }
+            }
+        }
+        connectivityManager?.registerDefaultNetworkCallback(networkCallback!!)
+    }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        networkCallback?.let { connectivityManager?.unregisterNetworkCallback(it) }
+    }
+
+    private fun buildNotification(text: String): android.app.Notification {
+        val pendingIntent = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val stopIntent = Intent(this, AwgService::class.java).apply { action = ACTION_STOP }
-        val stopPendingIntent = PendingIntent.getService(
-            this, 0, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("AWG Proxy")
+            .setContentTitle("Wiresocks Proxy")
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_secure)
+            .setSmallIcon(R.drawable.ic_tile)
             .setContentIntent(pendingIntent)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop", stopPendingIntent)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID, "AWG Proxy Service", NotificationManager.IMPORTANCE_LOW
-            )
+            val channel = NotificationChannel(CHANNEL_ID, "Wiresocks Service", NotificationManager.IMPORTANCE_LOW).apply { description = "Background proxy engine status" }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
