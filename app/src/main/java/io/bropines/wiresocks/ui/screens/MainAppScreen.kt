@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -38,10 +39,16 @@ fun MainAppScreen(viewModel: ProxyViewModel) {
                     onClick = { navController.navigate("config") { launchSingleTop = true } }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Info, "Logs") },
+                    icon = { Icon(Icons.Default.List, "Logs") },
                     label = { Text("Logs") },
                     selected = currentRoute == "logs",
                     onClick = { navController.navigate("logs") { launchSingleTop = true } }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Info, "About") },
+                    label = { Text("About") },
+                    selected = currentRoute == "about",
+                    onClick = { navController.navigate("about") { launchSingleTop = true } }
                 )
             }
         }
@@ -50,6 +57,7 @@ fun MainAppScreen(viewModel: ProxyViewModel) {
             composable("home") { HomeScreen(viewModel) }
             composable("config") { ConfigScreen(viewModel) }
             composable("logs") { LogsScreen(viewModel) }
+            composable("about") { AboutScreen() }
         }
     }
 }
