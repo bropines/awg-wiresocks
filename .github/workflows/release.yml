@@ -3,7 +3,10 @@ name: Android Release Build
 on:
   push:
     tags:
-      - 'v*' # Запускается при создании тега, например v1.0.0
+      - 'v*' # Запускается при создании тега
+
+permissions:
+  contents: write # Важно: нужно разрешение на создание релиза
 
 jobs:
   build:
@@ -12,24 +15,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 1. Настройка Go с кэшем
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.25.0'
+          cache: true # Включает кэш модулей и сборок Go
 
+      # 2. Настройка Java с кэшем Gradle
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
+          cache: 'gradle' # Сохраняет кэш Gradle между сборками
 
       - name: Setup Android SDK & NDK
         uses: android-actions/setup-android@v3
       
+      # Кэшируем установку gomobile, чтобы не качать каждый раз
+      - name: Cache gomobile
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/gomobile
+          key: ${{ runner.os }}-gomobile-${{ hashFiles('appctr/go.mod') }}
+          
       - name: Install gomobile
         run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          gomobile init
+          if ! command -v gomobile &> /dev/null; then
+            go install golang.org/x/mobile/cmd/gomobile@latest
+            gomobile init
+          fi
 
       - name: Build Go AAR
         working-directory: ./appctr
@@ -48,8 +64,19 @@ jobs:
           ORG_GRADLE_PROJECT_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           ORG_GRADLE_PROJECT_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload Release APK
+      # Оставляем артефакт на всякий случай
+      - name: Upload Release Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Wiresocks-Release
+          name: awg-wiresocks-release
           path: app/build/outputs/apk/release/app-release.apk
+
+      # Автоматическое создание GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/app-release.apk
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: false
