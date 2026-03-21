@@ -3,8 +3,6 @@ package appctr
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -80,40 +78,7 @@ func redirectGlobalLogs() {
 	}()
 }
 
-// --- ПРЕПРОЦЕССОР КОНФИГА (ФИКС ДЛЯ I1-I5) ---
-func preProcessConfig(configStr string) string {
-	lines := strings.Split(configStr, "\n")
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		upper := strings.ToUpper(trimmed)
-		if strings.HasPrefix(upper, "I1") || strings.HasPrefix(upper, "I2") ||
-			strings.HasPrefix(upper, "I3") || strings.HasPrefix(upper, "I4") ||
-			strings.HasPrefix(upper, "I5") {
-
-			parts := strings.SplitN(trimmed, "=", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				val := strings.TrimSpace(parts[1])
-				
-				val = strings.TrimSuffix(val, "<c>")
-				val = strings.TrimSuffix(val, "<C>")
-
-				if strings.HasPrefix(val, "<b 0x") && strings.HasSuffix(val, ">") {
-					hexStr := val[5 : len(val)-1]
-					b, err := hex.DecodeString(hexStr)
-					if err == nil {
-						b64Str := base64.StdEncoding.EncodeToString(b)
-						lines[i] = fmt.Sprintf("%s = %s", key, b64Str)
-						AddLog("CORE", fmt.Sprintf("Auto-fixed %s: HEX -> Base64", key))
-					}
-				}
-			}
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
-// --- ПЕРЕХВАТЧИК ПРОКСИ (ЗАЩИТА ОТ КРАША) ---
+// --- ПЕРЕХВАТЧИК ПРОКСИ (Вырезает секции, чтобы wireproxy не вызвал log.Fatal) ---
 func extractAndStripProxies(configStr string) (string, string, string) {
 	var newLines []string
 	var socksPort, httpPort string
@@ -123,7 +88,7 @@ func extractAndStripProxies(configStr string) (string, string, string) {
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		
+
 		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
 			inSocks = false
 			inHttp = false
@@ -168,7 +133,9 @@ func extractAndStripProxies(configStr string) (string, string, string) {
 func serveHttp(l net.Listener, tun *wireproxy.VirtualTun) {
 	for {
 		conn, err := l.Accept()
-		if err != nil { return }
+		if err != nil {
+			return
+		}
 		go handleHttpConn(conn, tun)
 	}
 }
@@ -177,7 +144,9 @@ func handleHttpConn(conn net.Conn, tun *wireproxy.VirtualTun) {
 	defer conn.Close()
 	rd := bufio.NewReader(conn)
 	req, err := http.ReadRequest(rd)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 
 	target := req.Host
 	if !strings.Contains(target, ":") {
@@ -189,7 +158,9 @@ func handleHttpConn(conn net.Conn, tun *wireproxy.VirtualTun) {
 	}
 
 	peer, err := tun.Tnet.Dial("tcp", target)
-	if err != nil { return }
+	if err != nil {
+		return
+	}
 	defer peer.Close()
 
 	if req.Method == http.MethodConnect {
@@ -200,7 +171,6 @@ func handleHttpConn(conn net.Conn, tun *wireproxy.VirtualTun) {
 	go io.Copy(peer, rd)
 	io.Copy(conn, peer)
 }
-
 
 // --- УПРАВЛЕНИЕ ЯДРОМ ---
 var (
@@ -217,10 +187,34 @@ func IsRunning() bool {
 	return activeTun != nil
 }
 
+func PingTunnel(host string) string {
+	stateMu.Lock()
+	tun := activeTun
+	stateMu.Unlock()
+
+	if tun == nil {
+		return "ERR: tunnel not running"
+	}
+
+	target := host + ":80"
+	start := time.Now()
+	conn, err := tun.Tnet.DialContext(context.Background(), "tcp", target)
+	if err != nil {
+		start = time.Now()
+		conn, err = tun.Tnet.DialContext(context.Background(), "tcp", host+":443")
+		if err != nil {
+			return fmt.Sprintf("ERR: %v", err)
+		}
+	}
+	elapsed := time.Since(start)
+	conn.Close()
+	return fmt.Sprintf("%d ms", elapsed.Milliseconds())
+}
+
 func Start(configStr string, cacheDir string) error {
+	// 1. Вырезаем прокси-секции, чтобы wireproxy их не увидел и не крашнул нам аппку
 	cleanConfig, socksPort, httpPort := extractAndStripProxies(configStr)
 
-	// Жестко останавливаем всё, если был предыдущий сеанс
 	stateMu.Lock()
 	if activeTun != nil || socksListener != nil || httpListener != nil {
 		stateMu.Unlock()
@@ -231,60 +225,31 @@ func Start(configStr string, cacheDir string) error {
 
 	redirectGlobalLogs()
 
-	// --- МАГИЯ: ИЩЕМ И ИСПРАВЛЯЕМ ФАЙЛ WGConfig ---
-	lines := strings.Split(cleanConfig, "\n")
-	var tmpWgPath string
-
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(strings.ToUpper(trimmed), "WGCONFIG") {
-			parts := strings.SplitN(trimmed, "=", 2)
-			if len(parts) == 2 {
-				wgPath := strings.TrimSpace(parts[1])
-				wgBytes, err := os.ReadFile(wgPath)
-				if err == nil {
-					fixedWg := preProcessConfig(string(wgBytes))
-					tmpWgPath = filepath.Join(cacheDir, "fixed_wg.conf")
-					err = os.WriteFile(tmpWgPath, []byte(fixedWg), 0600)
-					if err == nil {
-						lines[i] = fmt.Sprintf("WGConfig = %s", tmpWgPath)
-					}
-				}
-			}
-		}
-	}
-	
-	finalConfigStr := strings.Join(lines, "\n")
-	if tmpWgPath == "" {
-		finalConfigStr = preProcessConfig(finalConfigStr)
-	}
-
+	// 2. Сохраняем чистый конфиг во временный файл
 	tmpConf := filepath.Join(cacheDir, "current.conf")
-	err := os.WriteFile(tmpConf, []byte(finalConfigStr), 0600)
+	err := os.WriteFile(tmpConf, []byte(cleanConfig), 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write config: %v", err)
 	}
 	defer os.Remove(tmpConf)
 
+	// 3. wireproxy сам прочитает WGConfig путь из current.conf
 	conf, err := wireproxy.ParseConfig(tmpConf)
 	if err != nil {
-		if tmpWgPath != "" { os.Remove(tmpWgPath) }
 		return fmt.Errorf("config parse error: %v", err)
 	}
 
 	tun, err := wireproxy.StartWireguard(conf.Device, device.LogLevelVerbose)
 	if err != nil {
-		if tmpWgPath != "" { os.Remove(tmpWgPath) }
 		return fmt.Errorf("wireguard start error: %v", err)
 	}
-	if tmpWgPath != "" { os.Remove(tmpWgPath) }
 
 	stateMu.Lock()
 	activeTun = tun
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelFunc = cancel
 
-	// Поднимаем СВОЙ управляемый SOCKS5
+	// 4. Поднимаем наш безопасный "SOCKS дома"
 	if socksPort != "" {
 		sl, err := net.Listen("tcp", "127.0.0.1:"+socksPort)
 		if err == nil {
@@ -300,7 +265,6 @@ func Start(configStr string, cacheDir string) error {
 		}
 	}
 
-	// Поднимаем СВОЙ управляемый HTTP
 	if httpPort != "" {
 		hl, err := net.Listen("tcp", "127.0.0.1:"+httpPort)
 		if err == nil {
@@ -312,8 +276,6 @@ func Start(configStr string, cacheDir string) error {
 		}
 	}
 	stateMu.Unlock()
-
-	tun.StartPingIPs()
 
 	go func() {
 		<-ctx.Done()
@@ -332,7 +294,6 @@ func Stop() {
 	stateMu.Lock()
 	defer stateMu.Unlock()
 
-	// Аккуратно закрываем слушателей, порты освобождаются!
 	if socksListener != nil {
 		socksListener.Close()
 		socksListener = nil

@@ -6,10 +6,10 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -22,32 +22,40 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.bropines.wiresocks.viewmodel.ProxyViewModel
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
-// Утилита для вытаскивания значений из конфига по ключу
 fun extractValue(config: String, key: String): String {
     val regex = Regex("(?m)^\\s*$key\\s*=\\s*(.*)$", RegexOption.IGNORE_CASE)
     return regex.find(config)?.groupValues?.get(1)?.trim() ?: ""
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConfigScreen(viewModel: ProxyViewModel) {
     val context = LocalContext.current
-    val isConfigLoaded by viewModel.isConfigLoaded.collectAsState()
+    
+    // Новые стейты для списка профилей
+    val availableConfigs by viewModel.availableConfigs.collectAsState()
+    val selectedConfig by viewModel.selectedConfig.collectAsState()
+    var expanded by remember { mutableStateOf(false) }
+
     val rawConfig by viewModel.rawConfig.collectAsState()
     val socksPort by viewModel.socksPort.collectAsState()
     val httpPort by viewModel.httpPort.collectAsState()
 
-    // Локальные состояния для полей редактирования
+    // Interface
     var privateKey by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PrivateKey")) }
     var address by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Address")) }
     var dns by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "DNS")) }
+    var mtu by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "MTU").ifEmpty { "1280" }) }
+
+    // Peer
     var publicKey by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PublicKey")) }
+    var presharedKey by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PresharedKey")) }
     var endpoint by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Endpoint")) }
     var allowedIps by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "AllowedIPs").ifEmpty { "0.0.0.0/0, ::/0" }) }
-    
-    // Amnezia параметры
+    var keepalive by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PersistentKeepalive").ifEmpty { "25" }) }
+
+    // Amnezia AWG
     var jc by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Jc")) }
     var jmin by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Jmin")) }
     var jmax by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Jmax")) }
@@ -67,72 +75,102 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        try {
-            context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                val content = BufferedReader(InputStreamReader(inputStream)).readText()
-                viewModel.saveConfig(content)
-                Toast.makeText(context, "Profile imported!", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-        }
+        viewModel.importConfig(context, uri)
+        Toast.makeText(context, "Profile imported!", Toast.LENGTH_SHORT).show()
     }
 
-    // Функция сборки конфига обратно
     fun buildAndSaveConfig() {
-        val newConfig = """
-            [Interface]
-            PrivateKey = $privateKey
-            Address = $address
-            DNS = $dns
-            MTU = 1280
-            ${if (jc.isNotBlank()) "Jc = $jc" else ""}
-            ${if (jmin.isNotBlank()) "Jmin = $jmin" else ""}
-            ${if (jmax.isNotBlank()) "Jmax = $jmax" else ""}
-            ${if (s1.isNotBlank()) "S1 = $s1" else ""}
-            ${if (s2.isNotBlank()) "S2 = $s2" else ""}
-            ${if (h1.isNotBlank()) "H1 = $h1" else ""}
-            ${if (h2.isNotBlank()) "H2 = $h2" else ""}
-            ${if (h3.isNotBlank()) "H3 = $h3" else ""}
-            ${if (h4.isNotBlank()) "H4 = $h4" else ""}
-            ${if (i1.isNotBlank()) "I1 = $i1" else ""}
-            ${if (i2.isNotBlank()) "I2 = $i2" else ""}
-            ${if (i3.isNotBlank()) "I3 = $i3" else ""}
-            ${if (i4.isNotBlank()) "I4 = $i4" else ""}
-            ${if (i5.isNotBlank()) "I5 = $i5" else ""}
+        val sb = StringBuilder()
 
-            [Peer]
-            PublicKey = $publicKey
-            Endpoint = $endpoint
-            AllowedIPs = $allowedIps
-        """.trimIndent()
-        viewModel.saveConfig(newConfig)
+        sb.appendLine("[Interface]")
+        sb.appendLine("PrivateKey = $privateKey")
+        if (address.isNotBlank()) sb.appendLine("Address = $address")
+        if (dns.isNotBlank()) sb.appendLine("DNS = $dns")
+        if (mtu.isNotBlank()) sb.appendLine("MTU = $mtu")
+        
+        // Amnezia params
+        if (jc.isNotBlank()) sb.appendLine("Jc = $jc")
+        if (jmin.isNotBlank()) sb.appendLine("Jmin = $jmin")
+        if (jmax.isNotBlank()) sb.appendLine("Jmax = $jmax")
+        if (s1.isNotBlank()) sb.appendLine("S1 = $s1")
+        if (s2.isNotBlank()) sb.appendLine("S2 = $s2")
+        if (h1.isNotBlank()) sb.appendLine("H1 = $h1")
+        if (h2.isNotBlank()) sb.appendLine("H2 = $h2")
+        if (h3.isNotBlank()) sb.appendLine("H3 = $h3")
+        if (h4.isNotBlank()) sb.appendLine("H4 = $h4")
+        if (i1.isNotBlank()) sb.appendLine("I1 = $i1")
+        if (i2.isNotBlank()) sb.appendLine("I2 = $i2")
+        if (i3.isNotBlank()) sb.appendLine("I3 = $i3")
+        if (i4.isNotBlank()) sb.appendLine("I4 = $i4")
+        if (i5.isNotBlank()) sb.appendLine("I5 = $i5")
+
+        sb.appendLine()
+        sb.appendLine("[Peer]")
+        sb.appendLine("PublicKey = $publicKey")
+        if (presharedKey.isNotBlank()) sb.appendLine("PresharedKey = $presharedKey")
+        if (endpoint.isNotBlank()) sb.appendLine("Endpoint = $endpoint")
+        if (allowedIps.isNotBlank()) sb.appendLine("AllowedIPs = $allowedIps")
+        if (keepalive.isNotBlank()) sb.appendLine("PersistentKeepalive = $keepalive")
+
+        // Сохраняем в текущий выбранный файл
+        viewModel.saveCurrentConfig(sb.toString())
         Toast.makeText(context, "Configuration saved!", Toast.LENGTH_SHORT).show()
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
-        
-        // --- 1. КАРТОЧКА УПРАВЛЕНИЯ ПРОФИЛЕМ ---
+
+        // --- 1. ПРОФИЛЬ ---
         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Profile Management", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Status: ${if (isConfigLoaded) "Loaded ✅" else "Not Loaded ❌"}")
+
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+                    OutlinedTextField(
+                        value = selectedConfig?.name ?: "No profiles found",
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        availableConfigs.forEach { file ->
+                            DropdownMenuItem(
+                                text = { Text(file.name) },
+                                onClick = { viewModel.selectConfig(file); expanded = false }
+                            )
+                        }
+                    }
+                }
+                
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { importLauncher.launch("*/*") }, modifier = Modifier.weight(1f)) { Text("Import") }
+                    
                     OutlinedButton(onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.primaryClip?.getItemAt(0)?.text?.toString()?.let {
-                            viewModel.saveConfig(it)
-                            Toast.makeText(context, "Pasted & Saved", Toast.LENGTH_SHORT).show()
+                            // Создаем новый профиль из буфера обмена
+                            val newName = "pasted_${System.currentTimeMillis()}"
+                            viewModel.importConfigFromString(newName, it)
+                            Toast.makeText(context, "Pasted & Saved as new", Toast.LENGTH_SHORT).show()
                         }
                     }, modifier = Modifier.weight(1f)) { Text("Paste") }
+                    
+                    if (selectedConfig != null) {
+                        OutlinedButton(
+                            onClick = { 
+                                viewModel.deleteSelectedConfig()
+                                Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show() 
+                            },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) { Text("Delete") }
+                    }
                 }
             }
         }
 
-        // --- 2. НАСТРОЙКИ ПРОКСИ ---
+        // --- 2. ПОРТЫ ПРОКСИ ---
         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Local Proxy Ports", fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -144,26 +182,67 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
             }
         }
 
-        // --- 3. РЕДАКТОР WIREGUARD ---
-        if (isConfigLoaded) {
+        // --- 3. РЕДАКТОР ---
+        if (selectedConfig != null) {
             Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text("WireGuard Parameters", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Button(onClick = { buildAndSaveConfig() }) { Text("Save") }
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // ---- INTERFACE ----
+                    Text("[Interface]", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(8.dp))
-                    
-                    OutlinedTextField(value = endpoint, onValueChange = { endpoint = it }, label = { Text("Endpoint (IP:Port)") }, modifier = Modifier.fillMaxWidth())
+
+                    OutlinedTextField(value = privateKey, onValueChange = { privateKey = it }, label = { Text("PrivateKey") }, modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(value = address, onValueChange = { address = it }, label = { Text("Address") }, modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(value = privateKey, onValueChange = { privateKey = it }, label = { Text("PrivateKey") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = dns, onValueChange = { dns = it }, label = { Text("DNS (e.g. 1.1.1.1)") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = mtu,
+                        onValueChange = { mtu = it },
+                        label = { Text("MTU") },
+                        supportingText = { Text("1280 — безопасный, 1420 — стандарт") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // ---- PEER ----
+                    Text("[Peer]", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(value = endpoint, onValueChange = { endpoint = it }, label = { Text("Endpoint (IP:Port)") }, modifier = Modifier.fillMaxWidth())
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(value = publicKey, onValueChange = { publicKey = it }, label = { Text("PublicKey") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = presharedKey, onValueChange = { presharedKey = it }, label = { Text("PresharedKey (если есть)") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(value = allowedIps, onValueChange = { allowedIps = it }, label = { Text("AllowedIPs") }, modifier = Modifier.fillMaxWidth())
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = keepalive,
+                        onValueChange = { keepalive = it },
+                        label = { Text("PersistentKeepalive (сек)") },
+                        supportingText = { Text("25 — стандарт, 10 — для агрессивных NAT") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth().clickable { showAdvanced = !showAdvanced }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+
+                    // ---- AMNEZIA ----
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { showAdvanced = !showAdvanced }.padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text("Amnezia Advanced / Obfuscation", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.primary)
                         Icon(if (showAdvanced) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null)
                     }

@@ -18,8 +18,6 @@ import androidx.core.content.ContextCompat
 import io.bropines.wiresocks.ui.screens.MainAppScreen
 import io.bropines.wiresocks.ui.theme.AwgProxyTheme
 import io.bropines.wiresocks.viewmodel.ProxyViewModel
-import java.io.BufferedReader
-import java.io.InputStreamReader
 
 class MainActivity : ComponentActivity() {
     
@@ -67,15 +65,8 @@ class MainActivity : ComponentActivity() {
     private fun handleFileIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_VIEW) {
             intent.data?.let { uri ->
-                try {
-                    contentResolver.openInputStream(uri)?.use { inputStream ->
-                        val content = BufferedReader(InputStreamReader(inputStream)).readText()
-                        viewModel.saveConfig(content)
-                        Toast.makeText(this, "Profile loaded from file!", Toast.LENGTH_SHORT).show()
-                    }
-                } catch (e: Exception) {
-                    Toast.makeText(this, "Failed to read config file", Toast.LENGTH_SHORT).show()
-                }
+                viewModel.importConfig(this, uri)
+                Toast.makeText(this, "Profile imported!", Toast.LENGTH_SHORT).show()
             }
         }
     }
