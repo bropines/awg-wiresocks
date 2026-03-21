@@ -1,6 +1,7 @@
 # --- Android / IntelliJ ---
 .gradle/
 build/
+*/build/
 *.iml
 .idea/workspace.xml
 .idea/tasks.xml
@@ -11,7 +12,7 @@ build/
 .idea/caches
 .idea/navEditor.xml
 captures/
-.externalNativeBuild
+.externalNativeBuild/
 .cxx/
 local.properties
 
@@ -22,10 +23,7 @@ kotlin-daemon-embeddable-*.jar
 # --- Gradle ---
 .gradle-tree/
 gradle-app.setting
-!gradle-wrapper.jar
 .gradle-wrapper.jar
-gradlew
-gradlew.bat
 
 # --- Android Studio / Build Artifacts ---
 *.apk
@@ -43,6 +41,7 @@ gen/
 *.p12
 *.key
 google-services.json
+key_base64.txt
 
 # --- Log files ---
 *.log
