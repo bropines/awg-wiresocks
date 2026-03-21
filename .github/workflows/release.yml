@@ -15,7 +15,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 1. Умный кэш для Go
+      # 1. Настройка Go с кэшированием (ищем зависимости в appctr)
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -23,7 +23,7 @@ jobs:
           cache: true
           cache-dependency-path: 'appctr/go.sum'
 
-      # 2. Настраиваем Java и кэшируем зависимости Gradle
+      # 2. Настройка Java и кэша Gradle
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -31,38 +31,22 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      # 3. Кэшируем Android SDK/NDK
-      - name: Cache Android SDK/NDK
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/lib/android/sdk/ndk
-          key: ${{ runner.os }}-android-ndk-${{ hashFiles('app/build.gradle.kts') }}
-          restore-keys: |
-            ${{ runner.os }}-android-ndk-
-
-      # 4. Кэшируем бинарник gomobile
-      - name: Cache gomobile
-        uses: actions/cache@v4
-        with:
-          path: ~/go/bin/gomobile
-          key: ${{ runner.os }}-gomobile-${{ hashFiles('appctr/go.mod') }}
-          
-      - name: Install gomobile
+      # 3. Установка инструментов и сборка ядра (все архитектуры)
+      - name: Install gomobile & Build Core
         run: |
-          if ! command -v gomobile &> /dev/null; then
-            go install golang.org/x/mobile/cmd/gomobile@latest
-            gomobile init
-          fi
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          export PATH=$PATH:$(go env GOPATH)/bin
+          gomobile init
+          cd appctr
+          bash build.sh
 
-      - name: Build Go AAR
-        working-directory: ./appctr
-        run: ./build.sh
-
+      # 4. Декодируем Keystore из секретов GitHub
       - name: Decode Keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: echo $KEYSTORE_BASE64 | base64 -d > my-release-key.jks
 
+      # 5. Сборка подписанного релизного APK
       - name: Build and Sign APK
         run: ./gradlew assembleRelease
         env:
@@ -71,9 +55,12 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+      # 6. Создание релиза на GitHub и загрузка APK
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/release/app-release.apk
           name: Release ${{ github.ref_name }}
           generate_release_notes: true
+          draft: false
+          prerelease: false
