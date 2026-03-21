@@ -16,7 +16,7 @@ go mod tidy
 
 echo "Building AAR (Global Cache Mode)..."
 # Собираем БЕЗ флага -x (чтобы меньше мусора в логах), но с -v
-gomobile bind -v -ldflags='-s -w' -target="android/arm64,android/amd64" -androidapi 24 -o appctr.aar .
+gomobile bind -target=android/arm,android/arm64,android/386,android/amd64 -androidapi 24 -v -o appctr.aar .
 
 if [ -f "appctr.aar" ]; then
     echo "------------------------------------------------"
