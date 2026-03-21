@@ -8,14 +8,17 @@ android {
     compileSdk = 35 // Обновлено до Android 15
 
     signingConfigs {
-        create("release") {
-            // Эти свойства берутся из параметров, которые мы передаем в GitHub Actions
-            storeFile = file(project.findProperty("ORG_GRADLE_PROJECT_KEYSTORE_FILE") ?: "wiresocks.jks")
-            storePassword = project.findProperty("ORG_GRADLE_PROJECT_KEYSTORE_PASSWORD") as String?
-            keyAlias = project.findProperty("ORG_GRADLE_PROJECT_KEY_ALIAS") as String?
-            keyPassword = project.findProperty("ORG_GRADLE_PROJECT_KEY_PASSWORD") as String?
+            create("release") {
+                // Читаем переменные окружения напрямую
+                val keystorePath = System.getenv("KEYSTORE_FILE")
+                if (keystorePath != null) {
+                    storeFile = file(keystorePath)
+                    storePassword = System.getenv("KEYSTORE_PASSWORD")
+                    keyAlias = System.getenv("KEY_ALIAS")
+                    keyPassword = System.getenv("KEY_PASSWORD")
+                }
+            }
         }
-    }
 
     defaultConfig {
         applicationId = "io.bropines.wiresocks"
@@ -32,10 +35,13 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = true
-            isShrinkResources = true // Дополнительная оптимизация размера
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             
-            signingConfig = signingConfigs.getByName("release")
+            // Если в переменных есть путь к ключу — применяем подпись
+            if (System.getenv("KEYSTORE_FILE") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
