@@ -1,0 +1,74 @@
+name: Manual Artifact Build
+
+on:
+  workflow_dispatch: # Та самая магия, которая добавляет кнопку запуска
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 1. Умный кэш для Go
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.0'
+          cache: true
+          cache-dependency-path: 'appctr/go.sum'
+
+      # 2. Настраиваем Java и кэшируем зависимости Gradle
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      # 3. Кэшируем Android SDK/NDK
+      - name: Cache Android SDK/NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk
+          key: ${{ runner.os }}-android-ndk-${{ hashFiles('app/build.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-android-ndk-
+
+      # 4. Кэшируем бинарник gomobile
+      - name: Cache gomobile
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/gomobile
+          key: ${{ runner.os }}-gomobile-${{ hashFiles('appctr/go.mod') }}
+          
+      - name: Install gomobile
+        run: |
+          if ! command -v gomobile &> /dev/null; then
+            go install golang.org/x/mobile/cmd/gomobile@latest
+            gomobile init
+          fi
+
+      - name: Build Go AAR
+        working-directory: ./appctr
+        run: ./build.sh
+
+      - name: Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo $KEYSTORE_BASE64 | base64 -d > my-release-key.jks
+
+      - name: Build and Sign APK
+        run: ./gradlew assembleRelease
+        env:
+          KEYSTORE_FILE: ${{ github.workspace }}/my-release-key.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: awg-wiresocks-manual-build
+          path: app/build/outputs/apk/release/app-release.apk
+          retention-days: 7 # Храним неделю, чтобы не жрать место на GitHub
