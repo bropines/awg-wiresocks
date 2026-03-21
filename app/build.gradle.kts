@@ -5,22 +5,40 @@ plugins {
 
 android {
     namespace = "io.bropines.wiresocks"
-    compileSdk = 34
+    compileSdk = 35 // Обновлено до Android 15
+
+    signingConfigs {
+        create("release") {
+            // Эти свойства берутся из параметров, которые мы передаем в GitHub Actions
+            storeFile = file(project.findProperty("ORG_GRADLE_PROJECT_KEYSTORE_FILE") ?: "wiresocks.jks")
+            storePassword = project.findProperty("ORG_GRADLE_PROJECT_KEYSTORE_PASSWORD") as String?
+            keyAlias = project.findProperty("ORG_GRADLE_PROJECT_KEY_ALIAS") as String?
+            keyPassword = project.findProperty("ORG_GRADLE_PROJECT_KEY_PASSWORD") as String?
+        }
+    }
 
     defaultConfig {
         applicationId = "io.bropines.wiresocks"
         minSdk = 24
-        targetSdk = 34
-        versionCode = 3
-        versionName = "1.2"
+        targetSdk = 35 // Обновлено до Android 15
+        versionCode = 4
+        versionName = "1.0.6"
+
+        vectorDrawables {
+            useSupportLibrary = true
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
+            isShrinkResources = true // Дополнительная оптимизация размера
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            
+            signingConfig = signingConfigs.getByName("release")
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -35,6 +53,9 @@ android {
         kotlinCompilerExtensionVersion = "1.5.10"
     }
     packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
         jniLibs {
             useLegacyPackaging = true
         }
@@ -42,7 +63,7 @@ android {
 }
 
 dependencies {
-    implementation(project(":appctr")) // Наш Go-модуль
+    implementation(project(":appctr"))
     
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
