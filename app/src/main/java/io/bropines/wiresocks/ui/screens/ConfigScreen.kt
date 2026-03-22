@@ -33,7 +33,6 @@ fun extractValue(config: String, key: String): String {
 fun ConfigScreen(viewModel: ProxyViewModel) {
     val context = LocalContext.current
     
-    // Новые стейты для списка профилей
     val availableConfigs by viewModel.availableConfigs.collectAsState()
     val selectedConfig by viewModel.selectedConfig.collectAsState()
     var expanded by remember { mutableStateOf(false) }
@@ -53,7 +52,7 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
     var presharedKey by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PresharedKey")) }
     var endpoint by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Endpoint")) }
     var allowedIps by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "AllowedIPs").ifEmpty { "0.0.0.0/0, ::/0" }) }
-    var keepalive by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PersistentKeepalive").ifEmpty { "25" }) }
+    var keepalive by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PersistentKeepalive").ifEmpty { "" }) } // По умолчанию пусто
 
     // Amnezia AWG
     var jc by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Jc")) }
@@ -112,14 +111,12 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
         if (allowedIps.isNotBlank()) sb.appendLine("AllowedIPs = $allowedIps")
         if (keepalive.isNotBlank()) sb.appendLine("PersistentKeepalive = $keepalive")
 
-        // Сохраняем в текущий выбранный файл
         viewModel.saveCurrentConfig(sb.toString())
         Toast.makeText(context, "Configuration saved!", Toast.LENGTH_SHORT).show()
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
 
-        // --- 1. ПРОФИЛЬ ---
         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Profile Management", fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -150,7 +147,6 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
                     OutlinedButton(onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.primaryClip?.getItemAt(0)?.text?.toString()?.let {
-                            // Создаем новый профиль из буфера обмена
                             val newName = "pasted_${System.currentTimeMillis()}"
                             viewModel.importConfigFromString(newName, it)
                             Toast.makeText(context, "Pasted & Saved as new", Toast.LENGTH_SHORT).show()
@@ -170,7 +166,6 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
             }
         }
 
-        // --- 2. ПОРТЫ ПРОКСИ ---
         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("Local Proxy Ports", fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -182,7 +177,6 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
             }
         }
 
-        // --- 3. РЕДАКТОР ---
         if (selectedConfig != null) {
             Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -196,7 +190,6 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // ---- INTERFACE ----
                     Text("[Interface]", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -216,7 +209,6 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // ---- PEER ----
                     Text("[Peer]", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -232,13 +224,12 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
                         value = keepalive,
                         onValueChange = { keepalive = it },
                         label = { Text("PersistentKeepalive (сек)") },
-                        supportingText = { Text("25 — стандарт, 10 — для агрессивных NAT") },
+                        supportingText = { Text("Пусто или 0 — экономит батарею, 25 — если соединение зависает") },
                         modifier = Modifier.fillMaxWidth()
                     )
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    // ---- AMNEZIA ----
                     Row(
                         modifier = Modifier.fillMaxWidth().clickable { showAdvanced = !showAdvanced }.padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
