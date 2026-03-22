@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -22,7 +23,7 @@ import (
 // --- СИСТЕМА ЛОГОВ ---
 type LogManager struct {
 	mu      sync.RWMutex
-	logs    []string
+	logs[]string
 	maxSize int
 }
 
@@ -38,7 +39,7 @@ func AddLog(level, msg string) {
 		logManager.logs = logManager.logs[len(logManager.logs)/2:]
 	}
 	timestamp := time.Now().Format("15:04:05")
-	logManager.logs = append(logManager.logs, fmt.Sprintf("%s [%s] %s", timestamp, level, msg))
+	logManager.logs = append(logManager.logs, fmt.Sprintf("%s[%s] %s", timestamp, level, msg))
 }
 
 func GetLogs() string {
@@ -60,27 +61,28 @@ func redirectGlobalLogs() {
 	os.Stdout = w
 	os.Stderr = w
 
+	// Эта горутина читает логи без бесконечного пустого цикла (spinner)
 	go func() {
 		scanner := bufio.NewScanner(r)
-		for {
-			select {
-			case <-stopLogRedirect:
-				return
-			default:
-				if scanner.Scan() {
-					msg := scanner.Text()
-					if !strings.Contains(msg, "UAPI: Getting") {
-						AddLog("CORE", msg)
-					}
-				}
+		for scanner.Scan() {
+			msg := scanner.Text()
+			if !strings.Contains(msg, "UAPI: Getting") {
+				AddLog("CORE", msg)
 			}
 		}
+	}()
+
+	// Эта горутина ждет сигнала об остановке, чтобы корректно прервать scanner.Scan()
+	go func() {
+		<-stopLogRedirect
+		w.Close()
+		r.Close()
 	}()
 }
 
 // --- ПЕРЕХВАТЧИК ПРОКСИ (Вырезает секции, чтобы wireproxy не вызвал log.Fatal) ---
 func extractAndStripProxies(configStr string) (string, string, string) {
-	var newLines []string
+	var newLines[]string
 	var socksPort, httpPort string
 	lines := strings.Split(configStr, "\n")
 	inSocks := false
@@ -212,6 +214,9 @@ func PingTunnel(host string) string {
 }
 
 func Start(configStr string, cacheDir string) error {
+	// Снижаем агрессивность сборщика мусора для уменьшения нагрузки на процессор
+	debug.SetGCPercent(150)
+
 	// 1. Вырезаем прокси-секции, чтобы wireproxy их не увидел и не крашнул нам аппку
 	cleanConfig, socksPort, httpPort := extractAndStripProxies(configStr)
 
@@ -227,7 +232,7 @@ func Start(configStr string, cacheDir string) error {
 
 	// 2. Сохраняем чистый конфиг во временный файл
 	tmpConf := filepath.Join(cacheDir, "current.conf")
-	err := os.WriteFile(tmpConf, []byte(cleanConfig), 0600)
+	err := os.WriteFile(tmpConf,[]byte(cleanConfig), 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write config: %v", err)
 	}

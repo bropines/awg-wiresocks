@@ -41,7 +41,6 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
     private val _httpPort = MutableStateFlow(prefs.getString("httpPort", "8080") ?: "8080")
     val httpPort = _httpPort.asStateFlow()
 
-    // Сохраняем пинг-хост
     private val _pingHost = MutableStateFlow(prefs.getString("pingHost", "1.1.1.1") ?: "1.1.1.1")
     val pingHost = _pingHost.asStateFlow()
 
@@ -60,7 +59,7 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             while (true) {
                 _isRunning.value = Appctr.isRunning()
-                delay(1000)
+                delay(3000) // Увеличен интервал с 1000 до 3000 мс для экономии батареи
             }
         }
     }
@@ -86,7 +85,6 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
         try {
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 val content = InputStreamReader(inputStream).readText()
-                // Пытаемся достать оригинальное имя, если нет - генерим
                 var fileName = uri.lastPathSegment?.substringAfterLast("/") ?: "profile_${System.currentTimeMillis()}.conf"
                 if (!fileName.endsWith(".conf")) fileName += ".conf"
                 

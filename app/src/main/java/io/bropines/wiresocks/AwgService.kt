@@ -12,14 +12,12 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import appctr.Appctr
 
 class AwgService : Service() {
 
-    private var wakeLock: PowerManager.WakeLock? = null
     private var lastConfigStr: String? = null
     
     private var connectivityManager: ConnectivityManager? = null
@@ -51,10 +49,6 @@ class AwgService : Service() {
     }
 
     private fun startProxy(configStr: String) {
-        val powerManager = getSystemService(POWER_SERVICE) as PowerManager
-        wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Wiresocks::EngineWakeLock")
-        wakeLock?.acquire(10*60*1000L /*10 minutes max just in case*/)
-
         val notification = buildNotification("Wiresocks is active")
         
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -75,7 +69,6 @@ class AwgService : Service() {
 
     private fun stopProxy() {
         Appctr.stop()
-        wakeLock?.let { if (it.isHeld) it.release() }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -84,12 +77,11 @@ class AwgService : Service() {
         connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
-                // Если сменилась сеть и прокси работал - рестартуем ядро
                 if (Appctr.isRunning() && lastConfigStr != null) {
                     Appctr.addLog("CORE", "Network changed. Reconnecting tunnel...")
                     Thread {
                         Appctr.stop()
-                        Thread.sleep(1000) // Даем время закрыть сокеты
+                        Thread.sleep(1000)
                         Appctr.start(lastConfigStr!!, cacheDir.absolutePath)
                     }.start()
                 }
