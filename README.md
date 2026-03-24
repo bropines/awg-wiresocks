@@ -1,5 +1,7 @@
 # awg-wiresocks-android 🛡️
 
+[![Add to Obtainium](https://img.shields.io/badge/Obtainium-Add_to_App-green?style=for-the-badge&logo=android)](obtainium://add/https://github.com/bropines/awg-wiresocks)
+
 **awg-wiresocks-android** is a lightweight, high-performance Android application that brings the power of **AmneziaWG (AWG)** to your device without requiring root privileges or a system-wide VPN slot. 
 
 By leveraging a custom-built Go engine based on `wireproxy-awg`, it creates a localized proxy environment (SOCKS5/HTTP) that bypasses strict network filters while keeping your connection stable and obfuscated.
