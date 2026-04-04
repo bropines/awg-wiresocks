@@ -49,6 +49,7 @@ By leveraging a custom-built Go engine based on `wireproxy-awg`, it creates a lo
 
 * **Application Developer:** [bropines](https://github.com/bropines) (pinus / еж)
 * **Core Logic:** Based on [wireproxy-awg](https://github.com/artem-russkikh/wireproxy-awg) by Artem Russkikh.
+  * P.S. The core logic has been moved to a custom implementation that supports UDP associating [awg-wireproxy](https://github.com/bropines/awg-wireproxy). (But thanks to this person for implementing AWG.)
 * **Original Tool:** Derived from the original [wireproxy](https://github.com/pufferffish/wireproxy) by Wind Wong.
 
 ## ⚖️ License
