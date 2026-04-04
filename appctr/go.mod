@@ -4,8 +4,8 @@ go 1.25.0
 
 require (
 	github.com/amnezia-vpn/amneziawg-go v0.2.16
-	github.com/artem-russkikh/wireproxy-awg v1.0.13
-	github.com/things-go/go-socks5 v0.0.5
+	github.com/bropines/awg-wireproxy v1.2.1
+	github.com/things-go/go-socks5 v0.1.1
 	golang.org/x/mobile v0.0.0-20260312152759-81488f6aeb60
 )
 

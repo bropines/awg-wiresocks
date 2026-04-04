@@ -59,7 +59,7 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             while (true) {
                 _isRunning.value = Appctr.isRunning()
-                delay(3000) // Увеличен интервал с 1000 до 3000 мс для экономии батареи
+                delay(3000)
             }
         }
     }
@@ -139,9 +139,11 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
             context.startService(Intent(context, AwgService::class.java).apply { action = AwgService.ACTION_STOP })
         } else {
             val currentFile = _selectedConfig.value ?: return
+            
+            val fileContent = currentFile.readText()
 
             val finalConfig = """
-                WGConfig = ${currentFile.absolutePath}
+                $fileContent
                 
                 [Socks5]
                 BindAddress = 127.0.0.1:${_socksPort.value}

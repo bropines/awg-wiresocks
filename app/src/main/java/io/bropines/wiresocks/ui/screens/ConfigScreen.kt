@@ -41,6 +41,15 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
     val socksPort by viewModel.socksPort.collectAsState()
     val httpPort by viewModel.httpPort.collectAsState()
 
+    // Находим все нестандартные секции (например, [UDPProxyTunnel]), чтобы не стереть их при сохранении
+    val extraSections by remember(rawConfig) {
+        mutableStateOf(
+            rawConfig.split(Regex("(?m)^\\s*\\["))
+                .filter { it.isNotBlank() && !it.startsWith("Interface]", ignoreCase = true) && !it.startsWith("Peer]", ignoreCase = true) }
+                .joinToString("\n\n") { "[$it".trimEnd() }
+        )
+    }
+
     // Interface
     var privateKey by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PrivateKey")) }
     var address by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Address")) }
@@ -52,7 +61,7 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
     var presharedKey by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PresharedKey")) }
     var endpoint by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Endpoint")) }
     var allowedIps by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "AllowedIPs").ifEmpty { "0.0.0.0/0, ::/0" }) }
-    var keepalive by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PersistentKeepalive").ifEmpty { "" }) } // По умолчанию пусто
+    var keepalive by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PersistentKeepalive").ifEmpty { "" }) }
 
     // Amnezia AWG
     var jc by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Jc")) }
@@ -87,7 +96,6 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
         if (dns.isNotBlank()) sb.appendLine("DNS = $dns")
         if (mtu.isNotBlank()) sb.appendLine("MTU = $mtu")
         
-        // Amnezia params
         if (jc.isNotBlank()) sb.appendLine("Jc = $jc")
         if (jmin.isNotBlank()) sb.appendLine("Jmin = $jmin")
         if (jmax.isNotBlank()) sb.appendLine("Jmax = $jmax")
@@ -110,6 +118,12 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
         if (endpoint.isNotBlank()) sb.appendLine("Endpoint = $endpoint")
         if (allowedIps.isNotBlank()) sb.appendLine("AllowedIPs = $allowedIps")
         if (keepalive.isNotBlank()) sb.appendLine("PersistentKeepalive = $keepalive")
+
+        // Сохраняем дополнительные туннели (UDP/TCP), если они были в файле
+        if (extraSections.isNotBlank()) {
+            sb.appendLine()
+            sb.appendLine(extraSections)
+        }
 
         viewModel.saveCurrentConfig(sb.toString())
         Toast.makeText(context, "Configuration saved!", Toast.LENGTH_SHORT).show()
