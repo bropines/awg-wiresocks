@@ -11,7 +11,6 @@ import java.io.File
 
 class AwgTileService : TileService() {
 
-    // Вызывается, когда юзер открывает шторку (для обновления статуса иконки)
     override fun onStartListening() {
         super.onStartListening()
         updateTileState()
@@ -31,7 +30,6 @@ class AwgTileService : TileService() {
         tile.updateTile()
     }
 
-    // Вызывается при клике на тайл
     override fun onClick() {
         super.onClick()
         val isRunning = Appctr.isRunning()
@@ -42,7 +40,6 @@ class AwgTileService : TileService() {
             val prefs = getSharedPreferences("awg_prefs", Context.MODE_PRIVATE)
             val selectedConfName = prefs.getString("selectedConfig", null)
             
-            // Если конфига нет, просто игнорим нажатие
             if (selectedConfName == null) {
                 updateTileState()
                 return
@@ -54,11 +51,13 @@ class AwgTileService : TileService() {
                 return
             }
 
+            // Передаем текст конфига целиком для поддержки UDP туннелей
+            val fileContent = wgConfFile.readText()
             val socksPort = prefs.getString("socksPort", "1080") ?: "1080"
             val httpPort = prefs.getString("httpPort", "8080") ?: "8080"
 
             val finalConfig = """
-                WGConfig = ${wgConfFile.absolutePath}
+                $fileContent
                 
                 [Socks5]
                 BindAddress = 127.0.0.1:$socksPort
@@ -74,7 +73,6 @@ class AwgTileService : TileService() {
             ContextCompat.startForegroundService(this, intent)
         }
         
-        // Немного ждем, пока Go-ядро отработает, и обновляем внешний вид кнопки
         Thread {
             Thread.sleep(500)
             updateTileState()

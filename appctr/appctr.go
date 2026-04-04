@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/amnezia-vpn/amneziawg-go/device"
-	wireproxy "github.com/artem-russkikh/wireproxy-awg"
+	wireproxy "github.com/bropines/awg-wireproxy"
 	"github.com/things-go/go-socks5"
 	_ "golang.org/x/mobile/bind"
 )
@@ -23,7 +23,7 @@ import (
 // --- СИСТЕМА ЛОГОВ ---
 type LogManager struct {
 	mu      sync.RWMutex
-	logs[]string
+	logs    []string
 	maxSize int
 }
 
@@ -61,7 +61,6 @@ func redirectGlobalLogs() {
 	os.Stdout = w
 	os.Stderr = w
 
-	// Эта горутина читает логи без бесконечного пустого цикла (spinner)
 	go func() {
 		scanner := bufio.NewScanner(r)
 		for scanner.Scan() {
@@ -72,7 +71,6 @@ func redirectGlobalLogs() {
 		}
 	}()
 
-	// Эта горутина ждет сигнала об остановке, чтобы корректно прервать scanner.Scan()
 	go func() {
 		<-stopLogRedirect
 		w.Close()
@@ -80,9 +78,9 @@ func redirectGlobalLogs() {
 	}()
 }
 
-// --- ПЕРЕХВАТЧИК ПРОКСИ (Вырезает секции, чтобы wireproxy не вызвал log.Fatal) ---
+// --- ПЕРЕХВАТЧИК ПРОКСИ ---
 func extractAndStripProxies(configStr string) (string, string, string) {
-	var newLines[]string
+	var newLines []string
 	var socksPort, httpPort string
 	lines := strings.Split(configStr, "\n")
 	inSocks := false
@@ -214,10 +212,8 @@ func PingTunnel(host string) string {
 }
 
 func Start(configStr string, cacheDir string) error {
-	// Снижаем агрессивность сборщика мусора для уменьшения нагрузки на процессор
 	debug.SetGCPercent(150)
 
-	// 1. Вырезаем прокси-секции, чтобы wireproxy их не увидел и не крашнул нам аппку
 	cleanConfig, socksPort, httpPort := extractAndStripProxies(configStr)
 
 	stateMu.Lock()
@@ -230,23 +226,27 @@ func Start(configStr string, cacheDir string) error {
 
 	redirectGlobalLogs()
 
-	// 2. Сохраняем чистый конфиг во временный файл
 	tmpConf := filepath.Join(cacheDir, "current.conf")
-	err := os.WriteFile(tmpConf,[]byte(cleanConfig), 0600)
+	err := os.WriteFile(tmpConf, []byte(cleanConfig), 0600)
 	if err != nil {
 		return fmt.Errorf("failed to write config: %v", err)
 	}
 	defer os.Remove(tmpConf)
 
-	// 3. wireproxy сам прочитает WGConfig путь из current.conf
 	conf, err := wireproxy.ParseConfig(tmpConf)
 	if err != nil {
 		return fmt.Errorf("config parse error: %v", err)
 	}
 
-	tun, err := wireproxy.StartWireguard(conf.Device, device.LogLevelVerbose)
+	tun, err := wireproxy.StartWireguard(conf, device.LogLevelVerbose)
 	if err != nil {
 		return fmt.Errorf("wireguard start error: %v", err)
+	}
+
+	// ЗАПУСКАЕМ ДОПОЛНИТЕЛЬНЫЕ ТУННЕЛИ (UDP/TCP) ИЗ КОНФИГА
+	for _, spawner := range conf.Routines {
+		go spawner.SpawnRoutine(tun)
+		AddLog("CORE", "Spawned additional tunnel from config")
 	}
 
 	stateMu.Lock()
@@ -254,7 +254,6 @@ func Start(configStr string, cacheDir string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelFunc = cancel
 
-	// 4. Поднимаем наш безопасный "SOCKS дома"
 	if socksPort != "" {
 		sl, err := net.Listen("tcp", "127.0.0.1:"+socksPort)
 		if err == nil {
