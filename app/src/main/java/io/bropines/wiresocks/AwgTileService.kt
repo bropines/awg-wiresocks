@@ -51,16 +51,21 @@ class AwgTileService : TileService() {
                 return
             }
 
-            // Передаем текст конфига целиком для поддержки UDP туннелей
             val fileContent = wgConfFile.readText()
             val socksPort = prefs.getString("socksPort", "48151") ?: "48151"
             val httpPort = prefs.getString("httpPort", "") ?: ""
             val socksUser = prefs.getString("socksUser", "") ?: ""
             val socksPass = prefs.getString("socksPass", "") ?: ""
+            
+            // ЧИТАЕМ ФЛАГ ИЗ ПРЕФОВ
+            val disableUdp = prefs.getBoolean("disableUdp", false)
 
             val authConfig = if (socksUser.isNotBlank() && socksPass.isNotBlank()) {
                 "\nUsername = $socksUser\nPassword = $socksPass"
             } else ""
+
+            // ДОБАВЛЯЕМ В КОНФИГ
+            val udpConfig = if (disableUdp) "\nDisableUDP = true" else ""
 
             val httpConfig = if (httpPort.isNotBlank()) {
                 "\n\n[http]\nBindAddress = 127.0.0.1:$httpPort"
@@ -70,7 +75,7 @@ class AwgTileService : TileService() {
                 $fileContent
                 
                 [Socks5]
-                BindAddress = 127.0.0.1:$socksPort$authConfig$httpConfig
+                BindAddress = 127.0.0.1:$socksPort$authConfig$udpConfig$httpConfig
             """.trimIndent()
 
             val intent = Intent(this, AwgService::class.java).apply {

@@ -47,6 +47,10 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
     private val _socksPass = MutableStateFlow(prefs.getString("socksPass", "") ?: "")
     val socksPass = _socksPass.asStateFlow()
 
+    // НОВЫЙ СТЕЙТ ДЛЯ ОТКЛЮЧЕНИЯ UDP
+    private val _disableUdp = MutableStateFlow(prefs.getBoolean("disableUdp", false))
+    val disableUdp = _disableUdp.asStateFlow()
+
     private val _pingHost = MutableStateFlow(prefs.getString("pingHost", "1.1.1.1") ?: "1.1.1.1")
     val pingHost = _pingHost.asStateFlow()
 
@@ -145,6 +149,12 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putString("socksPass", pass.trim()).apply()
     }
 
+    // НОВАЯ ФУНКЦИЯ ОБНОВЛЕНИЯ UDP ФЛАГА
+    fun updateDisableUdp(disable: Boolean) {
+        _disableUdp.value = disable
+        prefs.edit().putBoolean("disableUdp", disable).apply()
+    }
+
     fun updatePingHost(host: String) {
         _pingHost.value = host
         prefs.edit().putString("pingHost", host).apply()
@@ -162,6 +172,9 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
                 "\nUsername = ${_socksUser.value}\nPassword = ${_socksPass.value}"
             } else ""
 
+            // ПОДКИДЫВАЕМ ФЛАГ ОТКЛЮЧЕНИЯ UDP В КОНФИГ
+            val udpConfig = if (_disableUdp.value) "\nDisableUDP = true" else ""
+
             val httpConfig = if (_httpPort.value.isNotBlank()) {
                 "\n\n[http]\nBindAddress = 127.0.0.1:${_httpPort.value}"
             } else ""
@@ -170,7 +183,7 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
                 $fileContent
                 
                 [Socks5]
-                BindAddress = 127.0.0.1:${_socksPort.value}$authConfig$httpConfig
+                BindAddress = 127.0.0.1:${_socksPort.value}$authConfig$udpConfig$httpConfig
             """.trimIndent()
 
             val intent = Intent(context, AwgService::class.java).apply {

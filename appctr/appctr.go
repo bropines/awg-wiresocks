@@ -79,9 +79,10 @@ func redirectGlobalLogs() {
 }
 
 // --- PROXY AND CREDENTIAL INTERCEPTOR ---
-func extractAndStripProxies(configStr string) (string, string, string, string, string) {
+func extractAndStripProxies(configStr string) (string, string, string, string, string, bool) {
 	var newLines []string
 	var socksPort, httpPort, socksUser, socksPass string
+	disableUDP := false
 	lines := strings.Split(configStr, "\n")
 	inSocks := false
 	inHttp := false
@@ -126,6 +127,16 @@ func extractAndStripProxies(configStr string) (string, string, string, string, s
 				}
 				continue
 			}
+			if strings.HasPrefix(lower, "disableudp") {
+				parts := strings.SplitN(trimmed, "=", 2)
+				if len(parts) == 2 {
+					val := strings.ToLower(strings.TrimSpace(parts[1]))
+					if val == "true" || val == "1" || val == "yes" {
+						disableUDP = true
+					}
+				}
+				continue
+			}
 			continue
 		}
 		if inHttp {
@@ -140,10 +151,22 @@ func extractAndStripProxies(configStr string) (string, string, string, string, s
 		}
 		newLines = append(newLines, line)
 	}
-	return strings.Join(newLines, "\n"), socksPort, httpPort, socksUser, socksPass
+	return strings.Join(newLines, "\n"), socksPort, httpPort, socksUser, socksPass, disableUDP
 }
 
-// --- STEALTH WRAPPER  ---
+// --- UDP FILTERING RULE (STRICT SOCKS5 MODE) ---
+type noUDPRule struct{}
+
+func (r *noUDPRule) Allow(ctx context.Context, req *socks5.Request) (context.Context, bool) {
+	// Command 0x03 in SOCKS5 is UDP ASSOCIATE.
+	if req.Command == 3 {
+		AddLog("CORE", "Blocked UDP ASSOCIATE request (Strict Mode is ON)")
+		return ctx, false
+	}
+	return ctx, true
+}
+
+// --- STEALTH WRAPPER ---
 type stealthListener struct {
 	net.Listener
 	requireAuth bool
@@ -167,24 +190,20 @@ func (l *stealthListener) Accept() (net.Conn, error) {
 
 		bufConn := bufio.NewReader(conn)
 
-		// 1. Read the header: SOCKS5: VER (1 byte) + NMETHODS (1 byte)
 		header, err := bufConn.Peek(2)
 		if err != nil || len(header) < 2 || header[0] != 0x05 {
-			// Not SOCKS5. We silently terminate the connection so that the scanner drops out due to a timeout or EOF.
 			conn.Close()
 			continue
 		}
 
 		nMethods := int(header[1])
 
-		// 2. Read the authentication methods offered by the client
 		fullGreeting, err := bufConn.Peek(2 + nMethods)
 		if err != nil || len(fullGreeting) < 2+nMethods {
 			conn.Close()
 			continue
 		}
 
-		// 3. If we request a password, the client MUST offer method 0x02.
 		if l.requireAuth {
 			hasAuthMethod := false
 			for i := 2; i < 2+nMethods; i++ {
@@ -195,8 +214,6 @@ func (l *stealthListener) Accept() (net.Conn, error) {
 			}
 
 			if !hasAuthMethod {
-				// The client is trying to break in without a password. 
-				// Instead of politely responding with 0x05 0xFF, we silently kick them out.
 				conn.Close()
 				continue
 			}
@@ -291,7 +308,7 @@ func PingTunnel(host string) string {
 func Start(configStr string, cacheDir string) error {
 	debug.SetGCPercent(150)
 
-	cleanConfig, socksPort, httpPort, socksUser, socksPass := extractAndStripProxies(configStr)
+	cleanConfig, socksPort, httpPort, socksUser, socksPass, disableUDP := extractAndStripProxies(configStr)
 
 	stateMu.Lock()
 	if activeTun != nil || socksListener != nil || httpListener != nil {
@@ -320,7 +337,6 @@ func Start(configStr string, cacheDir string) error {
 		return fmt.Errorf("wireguard start error: %v", err)
 	}
 
-	// Launch additional tunnels (UDP/TCP) from the configuration
 	for _, spawner := range conf.Routines {
 		go spawner.SpawnRoutine(tun)
 		AddLog("CORE", "Spawned additional tunnel from config")
@@ -338,7 +354,6 @@ func Start(configStr string, cacheDir string) error {
 			
 			hasCredentials := socksUser != "" && socksPass != ""
 
-			// turn the Lisener into protection
 			stealthL := &stealthListener{
 				Listener:    sl,
 				requireAuth: hasCredentials,
@@ -347,6 +362,11 @@ func Start(configStr string, cacheDir string) error {
 			options := []socks5.Option{
 				socks5.WithDial(tun.Tnet.DialContext),
 				socks5.WithResolver(tun),
+			}
+
+			if disableUDP {
+				options = append(options, socks5.WithRule(&noUDPRule{}))
+				AddLog("CORE", "Strict Mode: UDP routing disabled")
 			}
 
 			if hasCredentials {

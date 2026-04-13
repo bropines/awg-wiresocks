@@ -42,8 +42,8 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
     val httpPort by viewModel.httpPort.collectAsState()
     val socksUser by viewModel.socksUser.collectAsState()
     val socksPass by viewModel.socksPass.collectAsState()
+    val disableUdp by viewModel.disableUdp.collectAsState() // ВЫТЯГИВАЕМ СТЕЙТ UDP
 
-    // Находим все нестандартные секции (например, [UDPProxyTunnel]), чтобы не стереть их при сохранении
     val extraSections by remember(rawConfig) {
         mutableStateOf(
             rawConfig.split(Regex("(?m)^\\s*\\["))
@@ -52,20 +52,17 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
         )
     }
 
-    // Interface
     var privateKey by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PrivateKey")) }
     var address by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Address")) }
     var dns by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "DNS")) }
     var mtu by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "MTU").ifEmpty { "1280" }) }
 
-    // Peer
     var publicKey by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PublicKey")) }
     var presharedKey by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PresharedKey")) }
     var endpoint by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Endpoint")) }
     var allowedIps by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "AllowedIPs").ifEmpty { "0.0.0.0/0, ::/0" }) }
     var keepalive by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "PersistentKeepalive").ifEmpty { "" }) }
 
-    // Amnezia AWG
     var jc by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Jc")) }
     var jmin by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Jmin")) }
     var jmax by remember(rawConfig) { mutableStateOf(extractValue(rawConfig, "Jmax")) }
@@ -121,7 +118,6 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
         if (allowedIps.isNotBlank()) sb.appendLine("AllowedIPs = $allowedIps")
         if (keepalive.isNotBlank()) sb.appendLine("PersistentKeepalive = $keepalive")
 
-        // Сохраняем дополнительные туннели (UDP/TCP), если они были в файле
         if (extraSections.isNotBlank()) {
             sb.appendLine()
             sb.appendLine(extraSections)
@@ -222,12 +218,30 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
                     )
                 }
                 
-                Text(
-                    text = "If username/password are set, Stealth Mode is enabled to drop unauthorized scanners.",
-                    fontSize = 12.sp, 
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, 
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                // НОВЫЙ БЛОК: ТУМБЛЕР STRICT MODE (DISABLE UDP)
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.updateDisableUdp(!disableUdp) }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Switch(
+                        checked = disableUdp,
+                        onCheckedChange = { viewModel.updateDisableUdp(it) }
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text("Strict SOCKS5 Mode (TCP Only)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            text = "Closes UDP ports for maximum protection. Warning: it will break voice calls in messengers.",
+                            fontSize = 12.sp, 
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
             }
         }
 
@@ -327,4 +341,4 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
             }
         }
     }
-}
+}   
