@@ -35,11 +35,17 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
     private val _rawConfig = MutableStateFlow("")
     val rawConfig = _rawConfig.asStateFlow()
 
-    private val _socksPort = MutableStateFlow(prefs.getString("socksPort", "1080") ?: "1080")
+    private val _socksPort = MutableStateFlow(prefs.getString("socksPort", "48151") ?: "48151")
     val socksPort = _socksPort.asStateFlow()
 
-    private val _httpPort = MutableStateFlow(prefs.getString("httpPort", "8080") ?: "8080")
+    private val _httpPort = MutableStateFlow(prefs.getString("httpPort", "") ?: "")
     val httpPort = _httpPort.asStateFlow()
+
+    private val _socksUser = MutableStateFlow(prefs.getString("socksUser", "") ?: "")
+    val socksUser = _socksUser.asStateFlow()
+
+    private val _socksPass = MutableStateFlow(prefs.getString("socksPass", "") ?: "")
+    val socksPass = _socksPass.asStateFlow()
 
     private val _pingHost = MutableStateFlow(prefs.getString("pingHost", "1.1.1.1") ?: "1.1.1.1")
     val pingHost = _pingHost.asStateFlow()
@@ -129,6 +135,16 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putString("httpPort", cleanPort).apply()
     }
 
+    fun updateSocksUser(user: String) {
+        _socksUser.value = user.trim()
+        prefs.edit().putString("socksUser", user.trim()).apply()
+    }
+
+    fun updateSocksPass(pass: String) {
+        _socksPass.value = pass.trim()
+        prefs.edit().putString("socksPass", pass.trim()).apply()
+    }
+
     fun updatePingHost(host: String) {
         _pingHost.value = host
         prefs.edit().putString("pingHost", host).apply()
@@ -142,14 +158,19 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
             
             val fileContent = currentFile.readText()
 
+            val authConfig = if (_socksUser.value.isNotBlank() && _socksPass.value.isNotBlank()) {
+                "\nUsername = ${_socksUser.value}\nPassword = ${_socksPass.value}"
+            } else ""
+
+            val httpConfig = if (_httpPort.value.isNotBlank()) {
+                "\n\n[http]\nBindAddress = 127.0.0.1:${_httpPort.value}"
+            } else ""
+
             val finalConfig = """
                 $fileContent
                 
                 [Socks5]
-                BindAddress = 127.0.0.1:${_socksPort.value}
-                
-                [http]
-                BindAddress = 127.0.0.1:${_httpPort.value}
+                BindAddress = 127.0.0.1:${_socksPort.value}$authConfig$httpConfig
             """.trimIndent()
 
             val intent = Intent(context, AwgService::class.java).apply {

@@ -78,10 +78,10 @@ func redirectGlobalLogs() {
 	}()
 }
 
-// --- ПЕРЕХВАТЧИК ПРОКСИ ---
-func extractAndStripProxies(configStr string) (string, string, string) {
+// --- ПЕРЕХВАТЧИК ПРОКСИ И КРЕДОВ ---
+func extractAndStripProxies(configStr string) (string, string, string, string, string) {
 	var newLines []string
-	var socksPort, httpPort string
+	var socksPort, httpPort, socksUser, socksPass string
 	lines := strings.Split(configStr, "\n")
 	inSocks := false
 	inHttp := false
@@ -103,13 +103,28 @@ func extractAndStripProxies(configStr string) (string, string, string) {
 		}
 
 		if inSocks {
-			if strings.HasPrefix(strings.ToLower(trimmed), "bindaddress") {
+			lower := strings.ToLower(trimmed)
+			if strings.HasPrefix(lower, "bindaddress") {
 				parts := strings.SplitN(trimmed, "=", 2)
 				if len(parts) == 2 {
-					addr := strings.TrimSpace(parts[1])
-					_, port, _ := net.SplitHostPort(addr)
+					_, port, _ := net.SplitHostPort(strings.TrimSpace(parts[1]))
 					socksPort = port
 				}
+				continue
+			}
+			if strings.HasPrefix(lower, "username") {
+				parts := strings.SplitN(trimmed, "=", 2)
+				if len(parts) == 2 {
+					socksUser = strings.TrimSpace(parts[1])
+				}
+				continue
+			}
+			if strings.HasPrefix(lower, "password") {
+				parts := strings.SplitN(trimmed, "=", 2)
+				if len(parts) == 2 {
+					socksPass = strings.TrimSpace(parts[1])
+				}
+				continue
 			}
 			continue
 		}
@@ -117,8 +132,7 @@ func extractAndStripProxies(configStr string) (string, string, string) {
 			if strings.HasPrefix(strings.ToLower(trimmed), "bindaddress") {
 				parts := strings.SplitN(trimmed, "=", 2)
 				if len(parts) == 2 {
-					addr := strings.TrimSpace(parts[1])
-					_, port, _ := net.SplitHostPort(addr)
+					_, port, _ := net.SplitHostPort(strings.TrimSpace(parts[1]))
 					httpPort = port
 				}
 			}
@@ -126,10 +140,73 @@ func extractAndStripProxies(configStr string) (string, string, string) {
 		}
 		newLines = append(newLines, line)
 	}
-	return strings.Join(newLines, "\n"), socksPort, httpPort
+	return strings.Join(newLines, "\n"), socksPort, httpPort, socksUser, socksPass
 }
 
-// --- КАСТОМНЫЙ HTTP ПРОКСИ ---
+// --- STEALTH ОБЕРТКА (АНТИ-СКАНЕР РКН/КОРПОРАТОВ) ---
+type stealthListener struct {
+	net.Listener
+	requireAuth bool
+}
+
+type stealthConn struct {
+	net.Conn
+	reader *bufio.Reader
+}
+
+func (c *stealthConn) Read(b []byte) (int, error) {
+	return c.reader.Read(b)
+}
+
+func (l *stealthListener) Accept() (net.Conn, error) {
+	for {
+		conn, err := l.Listener.Accept()
+		if err != nil {
+			return nil, err
+		}
+
+		bufConn := bufio.NewReader(conn)
+
+		// 1. Читаем заголовок SOCKS5: VER (1 байт) + NMETHODS (1 байт)
+		header, err := bufConn.Peek(2)
+		if err != nil || len(header) < 2 || header[0] != 0x05 {
+			// Не SOCKS5. Молча рвем коннект, чтобы сканер отвалился по таймауту или EOF.
+			conn.Close()
+			continue
+		}
+
+		nMethods := int(header[1])
+
+		// 2. Читаем методы аутентификации, которые предлагает клиент
+		fullGreeting, err := bufConn.Peek(2 + nMethods)
+		if err != nil || len(fullGreeting) < 2+nMethods {
+			conn.Close()
+			continue
+		}
+
+		// 3. Если мы требуем пароль, клиент ОБЯЗАН предложить метод 0x02
+		if l.requireAuth {
+			hasAuthMethod := false
+			for i := 2; i < 2+nMethods; i++ {
+				if fullGreeting[i] == 0x02 { // 0x02 - Username/Password Auth
+					hasAuthMethod = true
+					break
+				}
+			}
+
+			if !hasAuthMethod {
+				// Клиент ломится без пароля. 
+				// Вместо того, чтобы вежливо отвечать 0x05 0xFF, шлем его нахер молча.
+				conn.Close()
+				continue
+			}
+		}
+
+		return &stealthConn{Conn: conn, reader: bufConn}, nil
+	}
+}
+
+// --- КАСТОМНЫЙ HTTP ПРОКСИ (Если передан порт) ---
 func serveHttp(l net.Listener, tun *wireproxy.VirtualTun) {
 	for {
 		conn, err := l.Accept()
@@ -214,7 +291,7 @@ func PingTunnel(host string) string {
 func Start(configStr string, cacheDir string) error {
 	debug.SetGCPercent(150)
 
-	cleanConfig, socksPort, httpPort := extractAndStripProxies(configStr)
+	cleanConfig, socksPort, httpPort, socksUser, socksPass := extractAndStripProxies(configStr)
 
 	stateMu.Lock()
 	if activeTun != nil || socksListener != nil || httpListener != nil {
@@ -243,7 +320,7 @@ func Start(configStr string, cacheDir string) error {
 		return fmt.Errorf("wireguard start error: %v", err)
 	}
 
-	// ЗАПУСКАЕМ ДОПОЛНИТЕЛЬНЫЕ ТУННЕЛИ (UDP/TCP) ИЗ КОНФИГА
+	// Запускаем дополнительные туннели (UDP/TCP) из конфига
 	for _, spawner := range conf.Routines {
 		go spawner.SpawnRoutine(tun)
 		AddLog("CORE", "Spawned additional tunnel from config")
@@ -258,11 +335,30 @@ func Start(configStr string, cacheDir string) error {
 		sl, err := net.Listen("tcp", "127.0.0.1:"+socksPort)
 		if err == nil {
 			socksListener = sl
-			srv := socks5.NewServer(
+			
+			hasCredentials := socksUser != "" && socksPass != ""
+
+			// Оборачиваем лисенер в нашу защиту
+			stealthL := &stealthListener{
+				Listener:    sl,
+				requireAuth: hasCredentials,
+			}
+
+			options := []socks5.Option{
 				socks5.WithDial(tun.Tnet.DialContext),
 				socks5.WithResolver(tun),
-			)
-			go srv.Serve(sl)
+			}
+
+			if hasCredentials {
+				creds := socks5.StaticCredentials{socksUser: socksPass}
+				options = append(options, socks5.WithCredential(creds))
+				AddLog("CORE", "SOCKS5 Auth & Stealth Filter Enabled")
+			} else {
+				AddLog("CORE", "WARNING: SOCKS5 is open. Stealth Filter inactive.")
+			}
+
+			srv := socks5.NewServer(options...)
+			go srv.Serve(stealthL)
 			AddLog("CORE", "SOCKS5 routing active on port "+socksPort)
 		} else {
 			AddLog("CORE", "SOCKS5 Bind Error: "+err.Error())

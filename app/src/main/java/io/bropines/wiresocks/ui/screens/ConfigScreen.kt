@@ -40,6 +40,8 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
     val rawConfig by viewModel.rawConfig.collectAsState()
     val socksPort by viewModel.socksPort.collectAsState()
     val httpPort by viewModel.httpPort.collectAsState()
+    val socksUser by viewModel.socksUser.collectAsState()
+    val socksPass by viewModel.socksPass.collectAsState()
 
     // Находим все нестандартные секции (например, [UDPProxyTunnel]), чтобы не стереть их при сохранении
     val extraSections by remember(rawConfig) {
@@ -182,12 +184,50 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
 
         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("Local Proxy Ports", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("Local Proxy Settings", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(modifier = Modifier.height(8.dp))
+                
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = socksPort, onValueChange = { viewModel.updateSocksPort(it) }, label = { Text("SOCKS5") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(value = httpPort, onValueChange = { viewModel.updateHttpPort(it) }, label = { Text("HTTP") }, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        value = socksPort, 
+                        onValueChange = { viewModel.updateSocksPort(it) }, 
+                        label = { Text("SOCKS5 Port") }, 
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = httpPort, 
+                        onValueChange = { viewModel.updateHttpPort(it) }, 
+                        label = { Text("HTTP Port") }, 
+                        placeholder = { Text("Empty to disable") },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = socksUser, 
+                        onValueChange = { viewModel.updateSocksUser(it) }, 
+                        label = { Text("Username") }, 
+                        placeholder = { Text("Optional") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = socksPass, 
+                        onValueChange = { viewModel.updateSocksPass(it) }, 
+                        label = { Text("Password") }, 
+                        placeholder = { Text("Optional") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                
+                Text(
+                    text = "If username/password are set, Stealth Mode is enabled to drop unauthorized scanners.",
+                    fontSize = 12.sp, 
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, 
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
         }
 

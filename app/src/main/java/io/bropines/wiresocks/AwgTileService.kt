@@ -53,17 +53,24 @@ class AwgTileService : TileService() {
 
             // Передаем текст конфига целиком для поддержки UDP туннелей
             val fileContent = wgConfFile.readText()
-            val socksPort = prefs.getString("socksPort", "1080") ?: "1080"
-            val httpPort = prefs.getString("httpPort", "8080") ?: "8080"
+            val socksPort = prefs.getString("socksPort", "48151") ?: "48151"
+            val httpPort = prefs.getString("httpPort", "") ?: ""
+            val socksUser = prefs.getString("socksUser", "") ?: ""
+            val socksPass = prefs.getString("socksPass", "") ?: ""
+
+            val authConfig = if (socksUser.isNotBlank() && socksPass.isNotBlank()) {
+                "\nUsername = $socksUser\nPassword = $socksPass"
+            } else ""
+
+            val httpConfig = if (httpPort.isNotBlank()) {
+                "\n\n[http]\nBindAddress = 127.0.0.1:$httpPort"
+            } else ""
 
             val finalConfig = """
                 $fileContent
                 
                 [Socks5]
-                BindAddress = 127.0.0.1:$socksPort
-                
-                [http]
-                BindAddress = 127.0.0.1:$httpPort
+                BindAddress = 127.0.0.1:$socksPort$authConfig$httpConfig
             """.trimIndent()
 
             val intent = Intent(this, AwgService::class.java).apply {
