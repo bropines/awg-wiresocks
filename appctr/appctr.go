@@ -20,7 +20,7 @@ import (
 	_ "golang.org/x/mobile/bind"
 )
 
-// --- СИСТЕМА ЛОГОВ ---
+// --- LOGGING SYSTEM ---
 type LogManager struct {
 	mu      sync.RWMutex
 	logs    []string
@@ -78,7 +78,7 @@ func redirectGlobalLogs() {
 	}()
 }
 
-// --- ПЕРЕХВАТЧИК ПРОКСИ И КРЕДОВ ---
+// --- PROXY AND CREDENTIAL INTERCEPTOR ---
 func extractAndStripProxies(configStr string) (string, string, string, string, string) {
 	var newLines []string
 	var socksPort, httpPort, socksUser, socksPass string
@@ -143,7 +143,7 @@ func extractAndStripProxies(configStr string) (string, string, string, string, s
 	return strings.Join(newLines, "\n"), socksPort, httpPort, socksUser, socksPass
 }
 
-// --- STEALTH ОБЕРТКА (АНТИ-СКАНЕР РКН/КОРПОРАТОВ) ---
+// --- STEALTH WRAPPER  ---
 type stealthListener struct {
 	net.Listener
 	requireAuth bool
@@ -167,24 +167,24 @@ func (l *stealthListener) Accept() (net.Conn, error) {
 
 		bufConn := bufio.NewReader(conn)
 
-		// 1. Читаем заголовок SOCKS5: VER (1 байт) + NMETHODS (1 байт)
+		// 1. Read the header: SOCKS5: VER (1 byte) + NMETHODS (1 byte)
 		header, err := bufConn.Peek(2)
 		if err != nil || len(header) < 2 || header[0] != 0x05 {
-			// Не SOCKS5. Молча рвем коннект, чтобы сканер отвалился по таймауту или EOF.
+			// Not SOCKS5. We silently terminate the connection so that the scanner drops out due to a timeout or EOF.
 			conn.Close()
 			continue
 		}
 
 		nMethods := int(header[1])
 
-		// 2. Читаем методы аутентификации, которые предлагает клиент
+		// 2. Read the authentication methods offered by the client
 		fullGreeting, err := bufConn.Peek(2 + nMethods)
 		if err != nil || len(fullGreeting) < 2+nMethods {
 			conn.Close()
 			continue
 		}
 
-		// 3. Если мы требуем пароль, клиент ОБЯЗАН предложить метод 0x02
+		// 3. If we request a password, the client MUST offer method 0x02.
 		if l.requireAuth {
 			hasAuthMethod := false
 			for i := 2; i < 2+nMethods; i++ {
@@ -195,8 +195,8 @@ func (l *stealthListener) Accept() (net.Conn, error) {
 			}
 
 			if !hasAuthMethod {
-				// Клиент ломится без пароля. 
-				// Вместо того, чтобы вежливо отвечать 0x05 0xFF, шлем его нахер молча.
+				// The client is trying to break in without a password. 
+				// Instead of politely responding with 0x05 0xFF, we silently kick them out.
 				conn.Close()
 				continue
 			}
@@ -206,7 +206,7 @@ func (l *stealthListener) Accept() (net.Conn, error) {
 	}
 }
 
-// --- КАСТОМНЫЙ HTTP ПРОКСИ (Если передан порт) ---
+// --- CUSTOM HTTP PROXY (if port is specified) ---
 func serveHttp(l net.Listener, tun *wireproxy.VirtualTun) {
 	for {
 		conn, err := l.Accept()
@@ -249,7 +249,7 @@ func handleHttpConn(conn net.Conn, tun *wireproxy.VirtualTun) {
 	io.Copy(conn, peer)
 }
 
-// --- УПРАВЛЕНИЕ ЯДРОМ ---
+// --- CORE CONTROLS ---
 var (
 	stateMu       sync.Mutex
 	activeTun     *wireproxy.VirtualTun
@@ -320,7 +320,7 @@ func Start(configStr string, cacheDir string) error {
 		return fmt.Errorf("wireguard start error: %v", err)
 	}
 
-	// Запускаем дополнительные туннели (UDP/TCP) из конфига
+	// Launch additional tunnels (UDP/TCP) from the configuration
 	for _, spawner := range conf.Routines {
 		go spawner.SpawnRoutine(tun)
 		AddLog("CORE", "Spawned additional tunnel from config")
@@ -338,7 +338,7 @@ func Start(configStr string, cacheDir string) error {
 			
 			hasCredentials := socksUser != "" && socksPass != ""
 
-			// Оборачиваем лисенер в нашу защиту
+			// turn the Lisener into protection
 			stealthL := &stealthListener{
 				Listener:    sl,
 				requireAuth: hasCredentials,
