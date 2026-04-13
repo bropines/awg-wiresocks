@@ -24,7 +24,6 @@ kotlin-daemon-embeddable-*.jar
 .gradle-tree/
 gradle-app.setting
 .gradle-wrapper.jar
-gradle-wrapper.jar
 
 # --- Android Studio / Build Artifacts ---
 *.apk
