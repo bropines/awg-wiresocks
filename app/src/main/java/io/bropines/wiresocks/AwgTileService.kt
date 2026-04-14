@@ -52,30 +52,31 @@ class AwgTileService : TileService() {
             }
 
             val fileContent = wgConfFile.readText()
+            
+            // ВЫТЯГИВАЕМ BIND IP ИЗ ПРЕФОВ
+            val bindIp = prefs.getString("bindIp", "127.0.0.1") ?: "127.0.0.1"
+            
             val socksPort = prefs.getString("socksPort", "48151") ?: "48151"
             val httpPort = prefs.getString("httpPort", "") ?: ""
             val socksUser = prefs.getString("socksUser", "") ?: ""
             val socksPass = prefs.getString("socksPass", "") ?: ""
-            
-            // ЧИТАЕМ ФЛАГ ИЗ ПРЕФОВ
             val disableUdp = prefs.getBoolean("disableUdp", false)
 
             val authConfig = if (socksUser.isNotBlank() && socksPass.isNotBlank()) {
                 "\nUsername = $socksUser\nPassword = $socksPass"
             } else ""
 
-            // ДОБАВЛЯЕМ В КОНФИГ
             val udpConfig = if (disableUdp) "\nDisableUDP = true" else ""
 
             val httpConfig = if (httpPort.isNotBlank()) {
-                "\n\n[http]\nBindAddress = 127.0.0.1:$httpPort"
+                "\n\n[http]\nBindAddress = $bindIp:$httpPort"
             } else ""
 
             val finalConfig = """
                 $fileContent
                 
                 [Socks5]
-                BindAddress = 127.0.0.1:$socksPort$authConfig$udpConfig$httpConfig
+                BindAddress = $bindIp:$socksPort$authConfig$udpConfig$httpConfig
             """.trimIndent()
 
             val intent = Intent(this, AwgService::class.java).apply {

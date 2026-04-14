@@ -81,7 +81,7 @@ func redirectGlobalLogs() {
 // --- PROXY AND CREDENTIAL INTERCEPTOR ---
 func extractAndStripProxies(configStr string) (string, string, string, string, string, bool) {
 	var newLines []string
-	var socksPort, httpPort, socksUser, socksPass string
+	var socksAddr, httpAddr, socksUser, socksPass string
 	disableUDP := false
 	lines := strings.Split(configStr, "\n")
 	inSocks := false
@@ -108,8 +108,7 @@ func extractAndStripProxies(configStr string) (string, string, string, string, s
 			if strings.HasPrefix(lower, "bindaddress") {
 				parts := strings.SplitN(trimmed, "=", 2)
 				if len(parts) == 2 {
-					_, port, _ := net.SplitHostPort(strings.TrimSpace(parts[1]))
-					socksPort = port
+					socksAddr = strings.TrimSpace(parts[1])
 				}
 				continue
 			}
@@ -143,22 +142,20 @@ func extractAndStripProxies(configStr string) (string, string, string, string, s
 			if strings.HasPrefix(strings.ToLower(trimmed), "bindaddress") {
 				parts := strings.SplitN(trimmed, "=", 2)
 				if len(parts) == 2 {
-					_, port, _ := net.SplitHostPort(strings.TrimSpace(parts[1]))
-					httpPort = port
+					httpAddr = strings.TrimSpace(parts[1])
 				}
 			}
 			continue
 		}
 		newLines = append(newLines, line)
 	}
-	return strings.Join(newLines, "\n"), socksPort, httpPort, socksUser, socksPass, disableUDP
+	return strings.Join(newLines, "\n"), socksAddr, httpAddr, socksUser, socksPass, disableUDP
 }
 
 // --- UDP FILTERING RULE (STRICT SOCKS5 MODE) ---
 type noUDPRule struct{}
 
 func (r *noUDPRule) Allow(ctx context.Context, req *socks5.Request) (context.Context, bool) {
-	// Command 0x03 in SOCKS5 is UDP ASSOCIATE.
 	if req.Command == 3 {
 		AddLog("CORE", "Blocked UDP ASSOCIATE request (Strict Mode is ON)")
 		return ctx, false
@@ -223,7 +220,7 @@ func (l *stealthListener) Accept() (net.Conn, error) {
 	}
 }
 
-// --- CUSTOM HTTP PROXY (if port is specified) ---
+// --- CUSTOM HTTP PROXY ---
 func serveHttp(l net.Listener, tun *wireproxy.VirtualTun) {
 	for {
 		conn, err := l.Accept()
@@ -308,7 +305,7 @@ func PingTunnel(host string) string {
 func Start(configStr string, cacheDir string) error {
 	debug.SetGCPercent(150)
 
-	cleanConfig, socksPort, httpPort, socksUser, socksPass, disableUDP := extractAndStripProxies(configStr)
+	cleanConfig, socksAddr, httpAddr, socksUser, socksPass, disableUDP := extractAndStripProxies(configStr)
 
 	stateMu.Lock()
 	if activeTun != nil || socksListener != nil || httpListener != nil {
@@ -347,8 +344,8 @@ func Start(configStr string, cacheDir string) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancelFunc = cancel
 
-	if socksPort != "" {
-		sl, err := net.Listen("tcp", "127.0.0.1:"+socksPort)
+	if socksAddr != "" {
+		sl, err := net.Listen("tcp", socksAddr)
 		if err == nil {
 			socksListener = sl
 			
@@ -379,18 +376,18 @@ func Start(configStr string, cacheDir string) error {
 
 			srv := socks5.NewServer(options...)
 			go srv.Serve(stealthL)
-			AddLog("CORE", "SOCKS5 routing active on port "+socksPort)
+			AddLog("CORE", "SOCKS5 routing active on "+socksAddr)
 		} else {
 			AddLog("CORE", "SOCKS5 Bind Error: "+err.Error())
 		}
 	}
 
-	if httpPort != "" {
-		hl, err := net.Listen("tcp", "127.0.0.1:"+httpPort)
+	if httpAddr != "" {
+		hl, err := net.Listen("tcp", httpAddr)
 		if err == nil {
 			httpListener = hl
 			go serveHttp(hl, tun)
-			AddLog("CORE", "HTTP routing active on port "+httpPort)
+			AddLog("CORE", "HTTP routing active on "+httpAddr)
 		} else {
 			AddLog("CORE", "HTTP Bind Error: "+err.Error())
 		}

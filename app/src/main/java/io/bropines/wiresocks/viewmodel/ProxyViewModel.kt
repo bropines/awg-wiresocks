@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStreamReader
+import kotlin.random.Random
 
 class ProxyViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -35,6 +36,10 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
     private val _rawConfig = MutableStateFlow("")
     val rawConfig = _rawConfig.asStateFlow()
 
+    // НОВЫЙ СТЕЙТ ДЛЯ BIND IP
+    private val _bindIp = MutableStateFlow(prefs.getString("bindIp", "127.0.0.1") ?: "127.0.0.1")
+    val bindIp = _bindIp.asStateFlow()
+
     private val _socksPort = MutableStateFlow(prefs.getString("socksPort", "48151") ?: "48151")
     val socksPort = _socksPort.asStateFlow()
 
@@ -47,7 +52,6 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
     private val _socksPass = MutableStateFlow(prefs.getString("socksPass", "") ?: "")
     val socksPass = _socksPass.asStateFlow()
 
-    // НОВЫЙ СТЕЙТ ДЛЯ ОТКЛЮЧЕНИЯ UDP
     private val _disableUdp = MutableStateFlow(prefs.getBoolean("disableUdp", false))
     val disableUdp = _disableUdp.asStateFlow()
 
@@ -127,6 +131,18 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateBindIp(ip: String) {
+        val cleanIp = ip.trim()
+        _bindIp.value = cleanIp
+        prefs.edit().putString("bindIp", cleanIp).apply()
+    }
+
+    fun generateRandomIp() {
+        // Android разрешает биндить сервисы в пределах подсети 127.0.0.0/8
+        val ip = "127.${Random.nextInt(1, 255)}.${Random.nextInt(1, 255)}.${Random.nextInt(1, 255)}"
+        updateBindIp(ip)
+    }
+
     fun updateSocksPort(port: String) {
         val cleanPort = port.filter { it.isDigit() }
         _socksPort.value = cleanPort
@@ -149,7 +165,6 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putString("socksPass", pass.trim()).apply()
     }
 
-    // НОВАЯ ФУНКЦИЯ ОБНОВЛЕНИЯ UDP ФЛАГА
     fun updateDisableUdp(disable: Boolean) {
         _disableUdp.value = disable
         prefs.edit().putBoolean("disableUdp", disable).apply()
@@ -172,18 +187,17 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
                 "\nUsername = ${_socksUser.value}\nPassword = ${_socksPass.value}"
             } else ""
 
-            // ПОДКИДЫВАЕМ ФЛАГ ОТКЛЮЧЕНИЯ UDP В КОНФИГ
             val udpConfig = if (_disableUdp.value) "\nDisableUDP = true" else ""
 
             val httpConfig = if (_httpPort.value.isNotBlank()) {
-                "\n\n[http]\nBindAddress = 127.0.0.1:${_httpPort.value}"
+                "\n\n[http]\nBindAddress = ${_bindIp.value}:${_httpPort.value}"
             } else ""
 
             val finalConfig = """
                 $fileContent
                 
                 [Socks5]
-                BindAddress = 127.0.0.1:${_socksPort.value}$authConfig$udpConfig$httpConfig
+                BindAddress = ${_bindIp.value}:${_socksPort.value}$authConfig$udpConfig$httpConfig
             """.trimIndent()
 
             val intent = Intent(context, AwgService::class.java).apply {

@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -38,11 +39,13 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
     var expanded by remember { mutableStateOf(false) }
 
     val rawConfig by viewModel.rawConfig.collectAsState()
+    
+    val bindIp by viewModel.bindIp.collectAsState()
     val socksPort by viewModel.socksPort.collectAsState()
     val httpPort by viewModel.httpPort.collectAsState()
     val socksUser by viewModel.socksUser.collectAsState()
     val socksPass by viewModel.socksPass.collectAsState()
-    val disableUdp by viewModel.disableUdp.collectAsState() // ВЫТЯГИВАЕМ СТЕЙТ UDP
+    val disableUdp by viewModel.disableUdp.collectAsState()
 
     val extraSections by remember(rawConfig) {
         mutableStateOf(
@@ -183,6 +186,25 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
                 Text("Local Proxy Settings", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(modifier = Modifier.height(8.dp))
                 
+                // --- NEW BIND IP ROW WITH RANDOMIZE BUTTON ---
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = bindIp, 
+                        onValueChange = { viewModel.updateBindIp(it) }, 
+                        label = { Text("Bind IP Address") }, 
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    FilledTonalIconButton(
+                        onClick = { viewModel.generateRandomIp() },
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Shuffle, contentDescription = "Randomize IP")
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = socksPort, 
@@ -218,7 +240,6 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
                     )
                 }
                 
-                // НОВЫЙ БЛОК: ТУМБЛЕР STRICT MODE (DISABLE UDP)
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
                     modifier = Modifier
@@ -341,4 +362,4 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
             }
         }
     }
-}   
+}

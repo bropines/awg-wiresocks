@@ -25,10 +25,11 @@ fun HomeScreen(viewModel: ProxyViewModel) {
     val context = LocalContext.current
     val isRunning by viewModel.isRunning.collectAsState()
     val selectedConfig by viewModel.selectedConfig.collectAsState()
+    val bindIp by viewModel.bindIp.collectAsState()
     val socksPort by viewModel.socksPort.collectAsState()
     val httpPort by viewModel.httpPort.collectAsState()
     val pingResult by viewModel.pingResult.collectAsState()
-    val pingHost by viewModel.pingHost.collectAsState() // Берем из ViewModel
+    val pingHost by viewModel.pingHost.collectAsState()
 
     var localPingHost by remember(pingHost) { mutableStateOf(pingHost) }
 
@@ -68,8 +69,10 @@ fun HomeScreen(viewModel: ProxyViewModel) {
                 Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Active Proxies", fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("SOCKS5: 127.0.0.1:$socksPort", color = MaterialTheme.colorScheme.primary)
-                    Text("HTTP:   127.0.0.1:$httpPort", color = MaterialTheme.colorScheme.primary)
+                    Text("SOCKS5: $bindIp:$socksPort", color = MaterialTheme.colorScheme.primary)
+                    if (httpPort.isNotBlank()) {
+                        Text("HTTP:   $bindIp:$httpPort", color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(16.dp))
