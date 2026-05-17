@@ -1,3 +1,12 @@
+> [!WARNING]
+> **DISCLAIMER: THIS PROJECT IS IN NO WAY AFFILIATED WITH WIRESOCK OR wiresock.net.**
+>
+> As an open-source developer, I personally do not support using proprietary software to wrap open protocols like WireGuard (WG) and AmneziaWG (AWG). That is my personal stance. 
+>
+> **THIS APPLICATION ONLY SUPPORTS STANDARD WG AND AWG CONFIGURATIONS.** I highly doubt Wiresock magically invented some groundbreaking new method for obfuscating WG handshakes anyway. 
+>
+> 💡 **Note:** If you need WARP configurations, I strongly recommend getting them from this source: [Warp Generator](https://warp-generator.github.io/)
+
 # awg-wiresocks-android 🛡️
 
 **awg-wiresocks-android** is a lightweight, high-performance Android application that brings the power of **AmneziaWG (AWG)** to your device without requiring root privileges or a system-wide VPN slot. 
