@@ -47,6 +47,9 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
     val socksPass by viewModel.socksPass.collectAsState()
     val disableUdp by viewModel.disableUdp.collectAsState()
 
+    val themeMode by viewModel.themeMode.collectAsState()
+    val useDynamicColors by viewModel.useDynamicColors.collectAsState()
+
     val extraSections by remember(rawConfig) {
         mutableStateOf(
             rawConfig.split(Regex("(?m)^\\s*\\["))
@@ -134,6 +137,48 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
 
         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
             Column(modifier = Modifier.padding(16.dp)) {
+                Text("App Appearance", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Theme Selection Row
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Theme:")
+                    val options = listOf("System", "Light", "Dark")
+                    var themeExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(onClick = { themeExpanded = true }) {
+                            Text(themeMode)
+                        }
+                        DropdownMenu(expanded = themeExpanded, onDismissRequest = { themeExpanded = false }) {
+                            options.forEach { option ->
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = { viewModel.updateThemeMode(option); themeExpanded = false }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Dynamic Colors Switch
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { viewModel.updateDynamicColors(!useDynamicColors) },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Dynamic Colors (Material You)", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text("Extract colors from wallpaper (Android 12+)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = useDynamicColors, onCheckedChange = { viewModel.updateDynamicColors(it) })
+                }
+            }
+        }
+
+        Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 Text("Profile Management", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -167,14 +212,31 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
                             Toast.makeText(context, "Pasted & Saved as new", Toast.LENGTH_SHORT).show()
                         }
                     }, modifier = Modifier.weight(1f)) { Text("Paste") }
-                    
-                    if (selectedConfig != null) {
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                if (selectedConfig != null) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                val sendIntent: android.content.Intent = android.content.Intent().apply {
+                                    action = android.content.Intent.ACTION_SEND
+                                    putExtra(android.content.Intent.EXTRA_TEXT, rawConfig)
+                                    type = "text/plain"
+                                    putExtra(android.content.Intent.EXTRA_TITLE, "Export ${selectedConfig!!.name}")
+                                }
+                                val shareIntent = android.content.Intent.createChooser(sendIntent, "Share Configuration")
+                                context.startActivity(shareIntent)
+                            }, modifier = Modifier.weight(1f)
+                        ) { Text("Export") }
+
                         OutlinedButton(
                             onClick = { 
                                 viewModel.deleteSelectedConfig()
                                 Toast.makeText(context, "Deleted", Toast.LENGTH_SHORT).show() 
                             },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier.weight(1f)
                         ) { Text("Delete") }
                     }
                 }
