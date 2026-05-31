@@ -8,7 +8,9 @@ import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -21,9 +23,31 @@ fun MainAppScreen(viewModel: ProxyViewModel) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route ?: "home"
+    var showAboutDialog by remember { mutableStateOf(false) }
+
+    if (showAboutDialog) {
+        Dialog(onDismissRequest = { showAboutDialog = false }) {
+            Surface(
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp
+            ) {
+                AboutScreen()
+            }
+        }
+    }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("AWG Proxy") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("AWG Proxy") },
+                actions = {
+                    IconButton(onClick = { showAboutDialog = true }) {
+                        Icon(Icons.Default.Info, contentDescription = "About")
+                    }
+                }
+            )
+        },
         bottomBar = {
             NavigationBar {
                 NavigationBarItem(
@@ -44,12 +68,6 @@ fun MainAppScreen(viewModel: ProxyViewModel) {
                     selected = currentRoute == "logs",
                     onClick = { navController.navigate("logs") { launchSingleTop = true } }
                 )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Default.Info, "About") },
-                    label = { Text("About") },
-                    selected = currentRoute == "about",
-                    onClick = { navController.navigate("about") { launchSingleTop = true } }
-                )
             }
         }
     ) { padding ->
@@ -57,7 +75,6 @@ fun MainAppScreen(viewModel: ProxyViewModel) {
             composable("home") { HomeScreen(viewModel) }
             composable("config") { ConfigScreen(viewModel) }
             composable("logs") { LogsScreen(viewModel) }
-            composable("about") { AboutScreen() }
         }
     }
 }
