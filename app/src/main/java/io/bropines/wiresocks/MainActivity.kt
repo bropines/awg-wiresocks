@@ -52,8 +52,8 @@ class MainActivity : ComponentActivity() {
 
         // 4. Запускаем UI с поддержкой темной темы
         setContent {
-            val themeMode by viewModel.themeMode.collectAsState(initial = "System")
-            val useDynamicColors by viewModel.useDynamicColors.collectAsState(initial = true)
+            val themeMode by viewModel.themeMode.collectAsState()
+            val useDynamicColors by viewModel.useDynamicColors.collectAsState()
             val isDarkTheme = when (themeMode) {
                 "Dark" -> true
                 "Light" -> false
