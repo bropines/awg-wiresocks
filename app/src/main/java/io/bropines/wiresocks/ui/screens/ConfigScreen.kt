@@ -143,7 +143,7 @@ fun ConfigScreen(viewModel: ProxyViewModel) {
                 // Theme Selection Row
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Theme:")
-                    val options = listOf("System", "Light", "Dark")
+                    val options = remember { listOf("System", "Light", "Dark") }
                     var themeExpanded by remember { mutableStateOf(false) }
                     Box {
                         OutlinedButton(onClick = { themeExpanded = true }) {
