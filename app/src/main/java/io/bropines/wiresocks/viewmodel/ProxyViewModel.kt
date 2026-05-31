@@ -55,6 +55,12 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
     private val _disableUdp = MutableStateFlow(prefs.getBoolean("disableUdp", false))
     val disableUdp = _disableUdp.asStateFlow()
 
+    private val _themeMode = MutableStateFlow(prefs.getString("themeMode", "System") ?: "System")
+    val themeMode = _themeMode.asStateFlow()
+
+    private val _useDynamicColors = MutableStateFlow(prefs.getBoolean("useDynamicColors", true))
+    val useDynamicColors = _useDynamicColors.asStateFlow()
+
     private val _pingHost = MutableStateFlow(prefs.getString("pingHost", "1.1.1.1") ?: "1.1.1.1")
     val pingHost = _pingHost.asStateFlow()
 
@@ -168,6 +174,16 @@ class ProxyViewModel(application: Application) : AndroidViewModel(application) {
     fun updateDisableUdp(disable: Boolean) {
         _disableUdp.value = disable
         prefs.edit().putBoolean("disableUdp", disable).apply()
+    }
+
+    fun updateThemeMode(mode: String) {
+        _themeMode.value = mode
+        prefs.edit().putString("themeMode", mode).apply()
+    }
+
+    fun updateDynamicColors(use: Boolean) {
+        _useDynamicColors.value = use
+        prefs.edit().putBoolean("useDynamicColors", use).apply()
     }
 
     fun updatePingHost(host: String) {

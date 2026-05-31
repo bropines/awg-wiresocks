@@ -14,6 +14,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import io.bropines.wiresocks.ui.screens.MainAppScreen
 import io.bropines.wiresocks.ui.theme.AwgProxyTheme
@@ -50,7 +52,14 @@ class MainActivity : ComponentActivity() {
 
         // 4. Запускаем UI с поддержкой темной темы
         setContent {
-            AwgProxyTheme {
+            val themeMode by viewModel.themeMode.collectAsState()
+            val useDynamicColors by viewModel.useDynamicColors.collectAsState()
+            val isDarkTheme = when (themeMode) {
+                "Dark" -> true
+                "Light" -> false
+                else -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+            AwgProxyTheme(darkTheme = isDarkTheme, dynamicColor = useDynamicColors) {
                 MainAppScreen(viewModel = viewModel)
             }
         }
