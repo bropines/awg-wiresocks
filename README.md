@@ -1,3 +1,15 @@
+> [!IMPORTANT]
+> ## 🗄️ This project is archived and no longer maintained
+>
+> [**WG Tunnel**](https://github.com/wgtunnel/wgtunnel) now covers everything this app did and more:
+> AmneziaWG 2.0–3.1 support, a local **SOCKS5 / HTTP Proxy mode** that does *not* occupy Android's VPN slot,
+> split tunneling, auto-tunnels, and active development. Please use it instead.
+>
+> The Go core that powered this app lives on in [awg-wireproxy](https://github.com/bropines/awg-wireproxy)
+> (AmneziaWG fork of wireproxy for Linux/servers/Docker).
+>
+> *Проект заархивирован. Используйте WG Tunnel (режим Proxy) — он делает то же самое и активно развивается.*
+
 > [!WARNING]
 > **DISCLAIMER: THIS PROJECT IS IN NO WAY AFFILIATED WITH WIRESOCK OR wiresock.net.**
 >
